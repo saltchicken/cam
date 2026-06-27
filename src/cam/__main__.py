@@ -184,6 +184,17 @@ def slider_changed(_sender, app_data):
     update_canvas()
 
 
+def listbox_changed(_sender, app_data):
+    """Update current line from listbox selection."""
+    global current_line
+    try:
+        current_line = gcode_lines.index(app_data) + 1
+        dpg.set_value("step_slider", current_line)
+        update_canvas()
+    except ValueError:
+        pass
+
+
 def on_resize(_sender, _app_data):
     """Dynamically scales the drawlist to fit the viewport."""
     vp_width = dpg.get_viewport_client_width()
@@ -269,7 +280,8 @@ def main():
                 dpg.add_listbox(items=gcode_lines,
                                 tag="gcode_listbox",
                                 width=-1,
-                                num_items=35)
+                                num_items=35,
+                                callback=listbox_changed)
 
     # Run the initial draw to set the starting state
     update_canvas()
