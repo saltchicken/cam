@@ -14,7 +14,7 @@ current_pos = [0.0, 0.0, 0.0]  # X, Y, Z
 # Stores tuples: (start_pt, end_pt, is_rapid, line_idx)
 toolpaths = []
 gcode_lines = []
-current_step = 0  # Tracks how many lines to draw
+current_line = 0  # Tracks how many G-Code lines to draw
 
 
 def parse_gcode(file_path):
@@ -118,17 +118,21 @@ def project_iso(x, y, z, scale=4.0, offset_x=300, offset_y=600):
 
 
 def update_canvas():
-    """Clears the drawlist and redraws paths up to current_step"""
+    """Clears the drawlist and redraws paths up to current_line"""
     # Clear existing lines from the drawlist
     dpg.delete_item("drawlist", children_only=True)
 
-    # Redraw everything up to the current step
-    max_idx = min(current_step, len(toolpaths))
+    # Find how many toolpaths to draw based on current_line
+    max_idx = 0
+    for tp in toolpaths:
+        if tp[3] < current_line:
+            max_idx += 1
+        else:
+            break
 
-    # Update the tracking text based on the last rendered line segment
-    if max_idx > 0:
-        line_idx = toolpaths[max_idx - 1][3]
-        current_gcode_text = gcode_lines[line_idx]
+    # Update the tracking text based on the current line
+    if current_line > 0 and current_line <= len(gcode_lines):
+        current_gcode_text = gcode_lines[current_line - 1]
         dpg.set_value("gcode_line_text", f"Current Line: {current_gcode_text}")
         dpg.set_value("gcode_listbox", current_gcode_text)
     else:
@@ -156,27 +160,27 @@ def update_canvas():
 
 
 def next_step():
-    """Advance to the next toolpath step."""
-    global current_step
-    if current_step < len(toolpaths):
-        current_step += 1
-        dpg.set_value("step_slider", current_step)
+    """Advance to the next G-Code line."""
+    global current_line
+    if current_line < len(gcode_lines):
+        current_line += 1
+        dpg.set_value("step_slider", current_line)
         update_canvas()
 
 
 def prev_step():
-    """Go back to the previous toolpath step."""
-    global current_step
-    if current_step > 0:
-        current_step -= 1
-        dpg.set_value("step_slider", current_step)
+    """Go back to the previous G-Code line."""
+    global current_line
+    if current_line > 0:
+        current_line -= 1
+        dpg.set_value("step_slider", current_line)
         update_canvas()
 
 
 def slider_changed(_sender, app_data):
-    """Update current step from slider."""
-    global current_step
-    current_step = app_data
+    """Update current line from slider."""
+    global current_line
+    current_line = app_data
     update_canvas()
 
 
@@ -203,7 +207,7 @@ def on_resize(_sender, _app_data):
 
 def main():
     """Main entry point for the application."""
-    global current_step
+    global current_line
 
     # --- Command Line Arguments ---
     parser = argparse.ArgumentParser(description="Visualize CNC G-Code in 3D.")
@@ -218,8 +222,8 @@ def main():
     # Parse the file provided via command line
     parse_gcode(args.filepath)
 
-    # Set the initial step to 0 (empty canvas)
-    current_step = 0
+    # Set the initial line to 0 (empty canvas)
+    current_line = 0
 
     # Initialize DearPyGui
     dpg.create_context()
@@ -241,11 +245,11 @@ def main():
                 with dpg.group(horizontal=True):  # type: ignore
                     dpg.add_button(label="< Prev", callback=prev_step)
                     dpg.add_button(label="Next >", callback=next_step)
-                    dpg.add_slider_int(label="Step",
+                    dpg.add_slider_int(label="Line",
                                        tag="step_slider",
                                        min_value=0,
-                                       max_value=len(toolpaths),
-                                       default_value=current_step,
+                                       max_value=len(gcode_lines),
+                                       default_value=current_line,
                                        callback=slider_changed,
                                        width=250)
 
