@@ -30,12 +30,16 @@ def parse_gcode(file_path):
                 current_g = "G0"
             if "G1" in line:
                 current_g = "G1"
-            if "G2" in line or "G3" in line:
-                current_g = "G1"
+            if "G2" in line:
+                current_g = "G2"
+            if "G3" in line:
+                current_g = "G3"
 
             x_match = re.search(r'X\s*([-+]?\d*\.\d+|\d+)', line)
             y_match = re.search(r'Y\s*([-+]?\d*\.\d+|\d+)', line)
             z_match = re.search(r'Z\s*([-+]?\d*\.\d+|\d+)', line)
+            i_match = re.search(r'I\s*([-+]?\d*\.\d+|\d+)', line)
+            j_match = re.search(r'J\s*([-+]?\d*\.\d+|\d+)', line)
 
             if not (x_match or y_match or z_match):
                 continue
@@ -50,7 +54,45 @@ def parse_gcode(file_path):
             end_pt = list(current_pos)
 
             is_rapid = (current_g == "G0")
-            toolpaths.append((start_pt, end_pt, is_rapid))
+
+            if current_g in ("G2", "G3"):
+                i_val = float(i_match.group(1)) if i_match else 0.0
+                j_val = float(j_match.group(1)) if j_match else 0.0
+
+                cx = start_pt[0] + i_val
+                cy = start_pt[1] + j_val
+                r = math.sqrt(i_val**2 + j_val**2)
+
+                if r > 0.0001:
+                    angle_start = math.atan2(start_pt[1] - cy, start_pt[0] - cx)
+                    angle_end = math.atan2(end_pt[1] - cy, end_pt[0] - cx)
+
+                    if current_g == "G3":  # Counter-clockwise
+                        if angle_end <= angle_start:
+                            angle_end += 2 * math.pi
+                    else:  # Clockwise
+                        if angle_end >= angle_start:
+                            angle_end -= 2 * math.pi
+
+                    arc_angle = abs(angle_end - angle_start)
+                    segments = max(1, int(math.degrees(arc_angle) / 5.0))
+
+                    prev_pt = list(start_pt)
+                    for step in range(1, segments + 1):
+                        t = step / segments
+                        cur_angle = angle_start + (angle_end - angle_start) * t
+                        
+                        step_x = cx + r * math.cos(cur_angle)
+                        step_y = cy + r * math.sin(cur_angle)
+                        step_z = start_pt[2] + (end_pt[2] - start_pt[2]) * t
+                        
+                        next_pt = [step_x, step_y, step_z]
+                        toolpaths.append((prev_pt, next_pt, False))
+                        prev_pt = next_pt
+                else:
+                    toolpaths.append((start_pt, end_pt, False))
+            else:
+                toolpaths.append((start_pt, end_pt, is_rapid))
 
 
 def project_iso(x, y, z, scale=4.0, offset_x=300, offset_y=600):
