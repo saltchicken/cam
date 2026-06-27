@@ -182,7 +182,6 @@ def slider_changed(_sender, app_data):
 
 def on_resize(_sender, _app_data):
     """Dynamically scales the drawlist to fit the viewport."""
-    # Fetch dimensions explicitly instead of unpacking _app_data
     vp_width = dpg.get_viewport_client_width()
     vp_height = dpg.get_viewport_client_height()
 
@@ -194,6 +193,12 @@ def on_resize(_sender, _app_data):
 
         dpg.set_item_width("drawlist", new_width)
         dpg.set_item_height("drawlist", new_height)
+        
+    if dpg.does_item_exist("gcode_listbox"):
+        # DearPyGui listboxes require an explicit 'num_items' to fill vertical space.
+        # Estimate row height (~18px) and calculate the amount of items that fit vertically.
+        num_items = max(3, (vp_height - 40) // 18)
+        dpg.configure_item("gcode_listbox", num_items=num_items)
 
 
 def main():
@@ -229,7 +234,8 @@ def main():
 
             # 1. Left Panel (Controls + Canvas)
             # width=-300 means "take up all space EXCEPT 300 pixels"
-            with dpg.child_window(width=-300, border=False):  # type: ignore
+            # height=-1 forces it to use full vertical window height
+            with dpg.child_window(width=-300, height=-1, border=False):  # type: ignore
 
                 # Control Panel
                 with dpg.group(horizontal=True):  # type: ignore
@@ -247,18 +253,19 @@ def main():
 
                 dpg.add_separator()
 
-                # Canvas (Given temporary 100x100 sizes to satisfy compiler initialization constraints)
+                # Canvas
                 with dpg.drawlist(tag="drawlist", width=700,
                                   height=650):  # type: ignore
                     pass
 
             # 2. Right Panel (G-Code List)
-            with dpg.child_window(width=280, border=False):  # type: ignore
-                # num_items=-1 forces it to fill the entire vertical height
+            # added height=-1 here to stretch the container to the floor of the viewport
+            with dpg.child_window(width=280, height=-1, border=False):  # type: ignore
+                # Dynamically updated in on_resize to fill the entire vertical height
                 dpg.add_listbox(items=gcode_lines,
                                 tag="gcode_listbox",
                                 width=-1,
-                                num_items=-1)
+                                num_items=35)
 
     # Run the initial draw to set the starting state
     update_canvas()
