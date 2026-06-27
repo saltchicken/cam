@@ -106,7 +106,13 @@ def parse_gcode(file_path):
                 toolpaths.append((start_pt, end_pt, is_rapid, line_idx))
 
 
-def project_iso(x, y, z, scale=4.0, offset_x=300, offset_y=600):
+# View parameters
+view_scale = 4.0
+view_offset_x = 300.0
+view_offset_y = 600.0
+
+
+def project_iso(x, y, z, scale, offset_x, offset_y):
     """Converts 3D CNC coordinates into 2D screen pixels"""
     angle = math.radians(30)
     screen_x = (x - y) * math.cos(angle) * scale + offset_x
@@ -142,8 +148,8 @@ def update_canvas():
 
     for i in range(max_idx):
         start, end, is_rapid, _ = toolpaths[i]
-        p1 = project_iso(start[0], start[1], start[2])
-        p2 = project_iso(end[0], end[1], end[2])
+        p1 = project_iso(start[0], start[1], start[2], view_scale, view_offset_x, view_offset_y)
+        p2 = project_iso(end[0], end[1], end[2], view_scale, view_offset_x, view_offset_y)
 
         if is_rapid:
             dpg.draw_line(p1,
@@ -181,6 +187,18 @@ def slider_changed(_sender, app_data):
     """Update current line from slider."""
     global current_line
     current_line = app_data
+    update_canvas()
+
+
+def view_changed(_sender, app_data, user_data):
+    """Update view parameters from sliders."""
+    global view_scale, view_offset_x, view_offset_y
+    if user_data == "scale":
+        view_scale = app_data
+    elif user_data == "offset_x":
+        view_offset_x = app_data
+    elif user_data == "offset_y":
+        view_offset_y = app_data
     update_canvas()
 
 
@@ -265,6 +283,11 @@ def main():
                                        width=250)
 
                     dpg.add_text("Current Line: (Empty)", tag="gcode_line_text")
+
+                with dpg.group(horizontal=True):
+                    dpg.add_slider_float(label="Scale", min_value=0.1, max_value=20.0, default_value=view_scale, callback=view_changed, user_data="scale", width=120)
+                    dpg.add_slider_float(label="Offset X", min_value=-1000.0, max_value=2000.0, default_value=view_offset_x, callback=view_changed, user_data="offset_x", width=120)
+                    dpg.add_slider_float(label="Offset Y", min_value=-1000.0, max_value=2000.0, default_value=view_offset_y, callback=view_changed, user_data="offset_y", width=120)
 
                 dpg.add_separator()
 
