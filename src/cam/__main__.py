@@ -21,7 +21,9 @@ def parse_gcode(file_path):
 
         for line in f:
             line = line.strip().upper()
-            if not line or line.startswith('(') or line.startswith(';'):
+            line = line.split(';')[0].split('(')[0].strip()
+            
+            if not line:
                 continue
 
             if "G0" in line:
