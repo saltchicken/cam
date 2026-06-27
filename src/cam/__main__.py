@@ -1,10 +1,13 @@
+"""A 3D CNC G-Code visualizer."""
+# pylint: disable=invalid-name, global-statement, too-many-locals, too-many-branches, too-many-statements, too-many-arguments, too-many-positional-arguments
+
 import argparse
 import math
 import os
 import re
 import sys
 
-import dearpygui.dearpygui as dpg
+import dearpygui.dearpygui as dpg  # pylint: disable=import-error
 
 # Global tracking variables
 current_pos = [0.0, 0.0, 0.0]  # X, Y, Z
@@ -15,11 +18,11 @@ current_step = 0  # Tracks how many lines to draw
 
 
 def parse_gcode(file_path):
-    global current_pos
+    """Parse a G-Code file and extract toolpaths."""
     toolpaths.clear()
     gcode_lines.clear()
 
-    with open(file_path, 'r') as f:
+    with open(file_path, 'r', encoding="utf-8") as f:
         current_g = "G0"
 
         for line in f:
@@ -60,7 +63,7 @@ def parse_gcode(file_path):
                 current_pos[2] = float(z_match.group(1))
             end_pt = list(current_pos)
 
-            is_rapid = (current_g == "G0")
+            is_rapid = current_g == "G0"
 
             if current_g in ("G2", "G3"):
                 i_val = float(i_match.group(1)) if i_match else 0.0
@@ -153,6 +156,7 @@ def update_canvas():
 
 
 def next_step():
+    """Advance to the next toolpath step."""
     global current_step
     if current_step < len(toolpaths):
         current_step += 1
@@ -161,6 +165,7 @@ def next_step():
 
 
 def prev_step():
+    """Go back to the previous toolpath step."""
     global current_step
     if current_step > 0:
         current_step -= 1
@@ -168,15 +173,16 @@ def prev_step():
         update_canvas()
 
 
-def slider_changed(sender, app_data):
+def slider_changed(_sender, app_data):
+    """Update current step from slider."""
     global current_step
     current_step = app_data
     update_canvas()
 
 
-def on_resize(sender, app_data):
+def on_resize(_sender, _app_data):
     """Dynamically scales the drawlist to fit the viewport."""
-    # Fetch dimensions explicitly instead of unpacking app_data
+    # Fetch dimensions explicitly instead of unpacking _app_data
     vp_width = dpg.get_viewport_client_width()
     vp_height = dpg.get_viewport_client_height()
 
@@ -191,6 +197,7 @@ def on_resize(sender, app_data):
 
 
 def main():
+    """Main entry point for the application."""
     global current_step
 
     # --- Command Line Arguments ---
@@ -217,15 +224,15 @@ def main():
     dpg.set_viewport_resize_callback(on_resize)
 
     # --- UI Setup ---
-    with dpg.window(tag="primary_window"):
-        with dpg.group(horizontal=True):
+    with dpg.window(tag="primary_window"):  # type: ignore
+        with dpg.group(horizontal=True):  # type: ignore
 
             # 1. Left Panel (Controls + Canvas)
             # width=-300 means "take up all space EXCEPT 300 pixels"
-            with dpg.child_window(width=-300, border=False):
+            with dpg.child_window(width=-300, border=False):  # type: ignore
 
                 # Control Panel
-                with dpg.group(horizontal=True):
+                with dpg.group(horizontal=True):  # type: ignore
                     dpg.add_button(label="< Prev", callback=prev_step)
                     dpg.add_button(label="Next >", callback=next_step)
                     dpg.add_slider_int(label="Step",
@@ -241,11 +248,12 @@ def main():
                 dpg.add_separator()
 
                 # Canvas (Given temporary 100x100 sizes to satisfy compiler initialization constraints)
-                with dpg.drawlist(tag="drawlist", width=700, height=650):
+                with dpg.drawlist(tag="drawlist", width=700,
+                                  height=650):  # type: ignore
                     pass
 
             # 2. Right Panel (G-Code List)
-            with dpg.child_window(width=280, border=False):
+            with dpg.child_window(width=280, border=False):  # type: ignore
                 # num_items=-1 forces it to fill the entire vertical height
                 dpg.add_listbox(items=gcode_lines,
                                 tag="gcode_listbox",
