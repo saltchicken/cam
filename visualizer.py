@@ -1,15 +1,15 @@
+import argparse
 import math
+import os
 import re
+import sys
 
 import dearpygui.dearpygui as dpg
 
-# Initialize DearPyGui
-dpg.create_context()
-dpg.create_viewport(title='Custom G-Code Visualizer', width=1024, height=768)
-
-# Global tracking variables for parsing
+# Global tracking variables
 current_pos = [0.0, 0.0, 0.0]  # X, Y, Z
 toolpaths = []  # Stores tuples: (start_pt, end_pt, is_rapid)
+current_step = 0  # Tracks how many lines to draw
 
 
 def parse_gcode(file_path):
@@ -51,52 +51,127 @@ def parse_gcode(file_path):
             toolpaths.append((start_pt, end_pt, is_rapid))
 
 
-# --- Mathematical 3D Isometric Projection ---
 def project_iso(x, y, z, scale=4.0, offset_x=300, offset_y=600):
     """Converts 3D CNC coordinates into 2D screen pixels"""
     angle = math.radians(30)
-    # Calculate isometric X and Y
     screen_x = (x - y) * math.cos(angle) * scale + offset_x
-    screen_y = (x + y) * math.sin(angle) * scale - (z * scale)
-
-    # Invert Y because computer screens draw top-to-bottom
-    return [screen_x, offset_y - screen_y]
+    screen_y = offset_y - (x + y) * math.sin(angle) * scale - (z * scale)
+    return [screen_x, screen_y]
 
 
-# --- Generate a dummy file ---
-with open("test_square.nc", "w") as test_file:
-    test_file.write(
-        "G0 Z5.0\nG0 X0 Y0\nG1 Z-2.0 F300\nG1 X50.0 Y0.0 F1000\nG1 X50.0 Y50.0\nG1 X0.0 Y50.0\nG1 X0.0 Y0.0\nG0 Z5.0\nG0 X0 Y0\n"
-    )
+# --- UI Callbacks and Drawing Logic ---
 
-# Run the parser on our test file
-parse_gcode("test_square.nc")
 
-# --- UI Setup and 3D Drawing ---
-with dpg.window(label="3D Viewport",
-                width=1024,
-                height=768,
-                no_move=True,
-                no_close=True):
+def update_canvas():
+    """Clears the drawlist and redraws paths up to current_step"""
+    # Clear existing lines from the drawlist
+    dpg.delete_item("drawlist", children_only=True)
 
-    # Modern DearPyGui uses 'drawlist' instead of 'drawlayer'
-    with dpg.drawlist(width=1024, height=768):
+    # Redraw everything up to the current step
+    max_idx = min(current_step, len(toolpaths))
+    for i in range(max_idx):
+        start, end, is_rapid = toolpaths[i]
+        p1 = project_iso(start[0], start[1], start[2])
+        p2 = project_iso(end[0], end[1], end[2])
 
-        # Render the toolpaths
-        for start, end, is_rapid in toolpaths:
-            # Convert the 3D start and end points into flat 2D screen coordinates
-            p1 = project_iso(start[0], start[1], start[2])
-            p2 = project_iso(end[0], end[1], end[2])
+        if is_rapid:
+            # Rapid moves
+            dpg.draw_line(p1,
+                          p2,
+                          color=[255, 140, 0, 200],
+                          thickness=1,
+                          parent="drawlist")
+        else:
+            # Cutting moves
+            dpg.draw_line(p1,
+                          p2,
+                          color=[0, 255, 255, 255],
+                          thickness=2,
+                          parent="drawlist")
 
-            if is_rapid:
-                # Render rapids as an orange line
-                dpg.draw_line(p1, p2, color=[255, 140, 0, 200], thickness=1)
-            else:
-                # Render cuts as a solid cyan line
-                dpg.draw_line(p1, p2, color=[0, 255, 255, 255], thickness=2)
 
-# Finish Viewport Configuration
-dpg.setup_dearpygui()
-dpg.show_viewport()
-dpg.start_dearpygui()
-dpg.destroy_context()
+def next_step():
+    global current_step
+    if current_step < len(toolpaths):
+        current_step += 1
+        dpg.set_value("step_slider", current_step)
+        update_canvas()
+
+
+def prev_step():
+    global current_step
+    if current_step > 0:
+        current_step -= 1
+        dpg.set_value("step_slider", current_step)
+        update_canvas()
+
+
+def slider_changed(sender, app_data):
+    global current_step
+    current_step = app_data
+    update_canvas()
+
+
+def main():
+    global current_step
+
+    # --- Command Line Arguments ---
+    parser = argparse.ArgumentParser(description="Visualize CNC G-Code in 3D.")
+    parser.add_argument("filepath",
+                        help="Path to the .nc G-Code file to visualize")
+    args = parser.parse_args()
+
+    if not os.path.exists(args.filepath):
+        print(f"Error: The file '{args.filepath}' could not be found.")
+        sys.exit(1)
+
+    # Parse the file provided via command line
+    parse_gcode(args.filepath)
+
+    # Set the initial step to 0 (empty canvas)
+    current_step = 0
+
+    # Initialize DearPyGui
+    dpg.create_context()
+    dpg.create_viewport(title="cam",
+                        width=1024,
+                        height=768)
+
+    # --- UI Setup ---
+    with dpg.window(label="3D Viewport",
+                    width=1024,
+                    height=768,
+                    no_move=True,
+                    no_close=True):
+
+        # 1. Control Panel
+        with dpg.group(horizontal=True):
+            dpg.add_button(label="< Prev", callback=prev_step)
+            dpg.add_button(label="Next >", callback=next_step)
+            dpg.add_slider_int(label="Step",
+                               tag="step_slider",
+                               min_value=0,
+                               max_value=len(toolpaths),
+                               default_value=current_step,
+                               callback=slider_changed,
+                               width=300)
+
+        dpg.add_separator()
+
+        # 2. Canvas
+        # We tag the drawlist so we can easily target it to clear and redraw children
+        with dpg.drawlist(width=1024, height=700, tag="drawlist"):
+            pass
+
+    # Run the initial draw to set the starting state
+    update_canvas()
+
+    # Finish Viewport Configuration
+    dpg.setup_dearpygui()
+    dpg.show_viewport()
+    dpg.start_dearpygui()
+    dpg.destroy_context()
+
+
+if __name__ == "__main__":
+    main()
