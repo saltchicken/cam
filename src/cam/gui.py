@@ -30,10 +30,8 @@ class DpgFrontend:
 
         if 0 < self.state.current_line <= len(self.state.gcode_lines):
             text = self.state.gcode_lines[self.state.current_line - 1]
-            dpg.set_value("gcode_line_text", f"Current Line: {text}")
             dpg.set_value("gcode_listbox", text)
         else:
-            dpg.set_value("gcode_line_text", "Current Line: (Empty)")
             if self.state.gcode_lines:
                 dpg.set_value("gcode_listbox", self.state.gcode_lines[0])
 
@@ -184,8 +182,6 @@ class DpgFrontend:
                             default_value=self.state.current_line,
                             callback=self.slider_changed,
                             width=250)
-                        dpg.add_text("Current Line: (Empty)",
-                                     tag="gcode_line_text")
 
                     with dpg.group(horizontal=True):
                         dpg.add_slider_float(
