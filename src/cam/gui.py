@@ -11,6 +11,9 @@ class DpgFrontend:
     def __init__(self, config: AppConfig, state: AppState):
         self.config = config
         self.state = state
+        self.last_mouse_pos = None
+        self.is_dragging_left = False
+        self.is_dragging_right = False
 
     def _project(self, x, y, z):
         """Helper to project 3D coordinates using the current view configuration."""
@@ -114,6 +117,63 @@ class DpgFrontend:
         except ValueError:
             pass
 
+    def _sync_view_sliders(self):
+        if dpg.does_item_exist("scale_slider"):
+            dpg.set_value("scale_slider", self.config.view_scale)
+            dpg.set_value("offset_x_slider", self.config.view_offset_x)
+            dpg.set_value("offset_y_slider", self.config.view_offset_y)
+            dpg.set_value("rot_x_slider", self.config.view_rot_x)
+            dpg.set_value("rot_y_slider", self.config.view_rot_y)
+            dpg.set_value("rot_z_slider", self.config.view_rot_z)
+
+    def on_mouse_move(self, _sender, app_data):
+        current_pos = app_data
+        
+        hovering_canvas = dpg.does_item_exist("drawlist") and dpg.is_item_hovered("drawlist")
+        
+        if dpg.is_mouse_button_down(0):
+            if hovering_canvas and not self.is_dragging_left:
+                self.is_dragging_left = True
+        else:
+            self.is_dragging_left = False
+            
+        if dpg.is_mouse_button_down(1) or dpg.is_mouse_button_down(2):
+            if hovering_canvas and not self.is_dragging_right:
+                self.is_dragging_right = True
+        else:
+            self.is_dragging_right = False
+
+        if self.last_mouse_pos is not None:
+            dx = current_pos[0] - self.last_mouse_pos[0]
+            dy = current_pos[1] - self.last_mouse_pos[1]
+            
+            if self.is_dragging_left:
+                self.config.view_rot_z -= dx * 0.5
+                self.config.view_rot_x -= dy * 0.5
+                
+                if self.config.view_rot_x > 180: self.config.view_rot_x -= 360
+                if self.config.view_rot_x < -180: self.config.view_rot_x += 360
+                if self.config.view_rot_z > 180: self.config.view_rot_z -= 360
+                if self.config.view_rot_z < -180: self.config.view_rot_z += 360
+                
+                self._sync_view_sliders()
+                self.update_canvas()
+            elif self.is_dragging_right:
+                self.config.view_offset_x += dx
+                self.config.view_offset_y += dy
+                self._sync_view_sliders()
+                self.update_canvas()
+
+        self.last_mouse_pos = current_pos
+
+    def on_mouse_wheel(self, _sender, app_data):
+        if dpg.does_item_exist("drawlist") and dpg.is_item_hovered("drawlist"):
+            zoom_factor = 1.0 + (app_data * 0.1)
+            self.config.view_scale *= zoom_factor
+            self.config.view_scale = max(0.01, min(self.config.view_scale, 100.0))
+            self._sync_view_sliders()
+            self.update_canvas()
+
     def on_resize(self, _sender, _app_data):
         vp_width = dpg.get_viewport_client_width()
         vp_height = dpg.get_viewport_client_height()
@@ -215,6 +275,10 @@ class DpgFrontend:
                             height=self.config.window_height)
         dpg.set_viewport_resize_callback(self.on_resize)
 
+        with dpg.handler_registry():
+            dpg.add_mouse_move_handler(callback=self.on_mouse_move)
+            dpg.add_mouse_wheel_handler(callback=self.on_mouse_wheel)
+
         with dpg.window(tag="primary_window"):
             with dpg.group(horizontal=True):
 
@@ -235,14 +299,16 @@ class DpgFrontend:
                     with dpg.group(horizontal=True):
                         dpg.add_slider_float(
                             label="Scale",
+                            tag="scale_slider",
                             min_value=0.1,
-                            max_value=20.0,
+                            max_value=100.0,
                             default_value=self.config.view_scale,
                             callback=self.view_changed,
                             user_data="scale",
                             width=120)
                         dpg.add_slider_float(
                             label="Offset X",
+                            tag="offset_x_slider",
                             min_value=-5000.0,
                             max_value=5000.0,
                             default_value=self.config.view_offset_x,
@@ -251,6 +317,7 @@ class DpgFrontend:
                             width=120)
                         dpg.add_slider_float(
                             label="Offset Y",
+                            tag="offset_y_slider",
                             min_value=-5000.0,
                             max_value=5000.0,
                             default_value=self.config.view_offset_y,
@@ -259,6 +326,7 @@ class DpgFrontend:
                             width=120)
                         dpg.add_slider_float(
                             label="Rot X",
+                            tag="rot_x_slider",
                             min_value=-180.0,
                             max_value=180.0,
                             default_value=self.config.view_rot_x,
@@ -267,6 +335,7 @@ class DpgFrontend:
                             width=120)
                         dpg.add_slider_float(
                             label="Rot Y",
+                            tag="rot_y_slider",
                             min_value=-180.0,
                             max_value=180.0,
                             default_value=self.config.view_rot_y,
@@ -275,6 +344,7 @@ class DpgFrontend:
                             width=120)
                         dpg.add_slider_float(
                             label="Rot Z",
+                            tag="rot_z_slider",
                             min_value=-180.0,
                             max_value=180.0,
                             default_value=self.config.view_rot_z,
