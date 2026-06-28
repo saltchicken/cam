@@ -58,8 +58,18 @@ class VispyFrontend(QtWidgets.QMainWindow):
         self.step_slider.setMinimum(0)
         self.step_slider.setMaximum(len(self.state.gcode_lines))
         self.step_slider.setValue(self.state.current_line)
+        
+        # Disable tracking: only emit valueChanged when the slider is released
+        self.step_slider.setTracking(False) 
+        
         self.step_slider.valueChanged.connect(self.slider_changed)
         vbox.addWidget(self.step_slider)
+
+        # --- Add Debounce Timer ---
+        self.debounce_timer = QtCore.QTimer()
+        self.debounce_timer.setSingleShot(True)
+        self.debounce_timer.setInterval(150) # 150ms delay
+        self.debounce_timer.timeout.connect(self.update_canvas)
 
         vbox.addSpacing(20)
         vbox.addWidget(QtWidgets.QLabel("Stock Dimensions"))
@@ -123,16 +133,23 @@ class VispyFrontend(QtWidgets.QMainWindow):
     def prev_step(self):
         if self.state.current_line > 0:
             self.state.current_line -= 1
+            self.step_slider.blockSignals(True)
             self.step_slider.setValue(self.state.current_line)
+            self.step_slider.blockSignals(False)
+            self.update_canvas() # Update instantly
 
     def next_step(self):
         if self.state.current_line < len(self.state.gcode_lines):
             self.state.current_line += 1
+            self.step_slider.blockSignals(True)
             self.step_slider.setValue(self.state.current_line)
+            self.step_slider.blockSignals(False)
+            self.update_canvas() # Update instantly
 
     def slider_changed(self, value):
         self.state.current_line = value
-        self.update_canvas()
+        # Start (or restart) the debounce timer
+        self.debounce_timer.start()
 
     def on_listbox_changed(self, row):
         self.state.current_line = row + 1
