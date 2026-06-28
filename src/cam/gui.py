@@ -59,10 +59,9 @@ class VispyFrontend(QtWidgets.QMainWindow):
         self.step_slider.setMaximum(len(self.state.gcode_lines))
         self.step_slider.setValue(self.state.current_line)
         
-        # Disable tracking: only emit valueChanged when the slider is released
-        self.step_slider.setTracking(False) 
-        
+        # Tracking is enabled by default, so it updates continuously while dragging
         self.step_slider.valueChanged.connect(self.slider_changed)
+        self.step_slider.sliderReleased.connect(self.update_canvas)
         vbox.addWidget(self.step_slider)
 
         # --- Add Debounce Timer ---
@@ -104,7 +103,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
             parent=self.view.scene
         )
         
-        # New Skirt Visual for solid rendering (darkened slightly for visual contrast)
+        # Skirt Visual for solid rendering
         self.skirt_visual = scene.visuals.Mesh(
             color=(0.7, 0.7, 0.15, 1.0),
             parent=self.view.scene
@@ -116,6 +115,13 @@ class VispyFrontend(QtWidgets.QMainWindow):
         scene.visuals.XYZAxis(parent=self.view.scene)
 
         self.update_canvas()
+
+    def update_list_selection(self):
+        """Immediately updates the highlighted row in the G-code listbox."""
+        if 0 < self.state.current_line <= len(self.state.gcode_lines):
+            self.gcode_list.blockSignals(True)
+            self.gcode_list.setCurrentRow(self.state.current_line - 1)
+            self.gcode_list.blockSignals(False)
 
     def stock_changed(self):
         self.state.stock_size_x = self.stock_x_input.value()
@@ -136,6 +142,8 @@ class VispyFrontend(QtWidgets.QMainWindow):
             self.step_slider.blockSignals(True)
             self.step_slider.setValue(self.state.current_line)
             self.step_slider.blockSignals(False)
+            
+            self.update_list_selection()
             self.update_canvas() # Update instantly
 
     def next_step(self):
@@ -144,12 +152,15 @@ class VispyFrontend(QtWidgets.QMainWindow):
             self.step_slider.blockSignals(True)
             self.step_slider.setValue(self.state.current_line)
             self.step_slider.blockSignals(False)
+            
+            self.update_list_selection()
             self.update_canvas() # Update instantly
 
     def slider_changed(self, value):
         self.state.current_line = value
-        # Start (or restart) the debounce timer
-        self.debounce_timer.start()
+        self.update_list_selection()
+        if not self.step_slider.isSliderDown():
+            self.debounce_timer.start()
 
     def on_listbox_changed(self, row):
         self.state.current_line = row + 1
@@ -202,12 +213,6 @@ class VispyFrontend(QtWidgets.QMainWindow):
             self.cut_lines.set_data(pos=np.array(cut_pts, dtype=np.float32), connect='segments')
         else:
             self.cut_lines.set_data(pos=np.zeros((0, 3), dtype=np.float32))
-
-        # Update G-code list selection
-        if 0 < self.state.current_line <= len(self.state.gcode_lines):
-            self.gcode_list.blockSignals(True)
-            self.gcode_list.setCurrentRow(self.state.current_line - 1)
-            self.gcode_list.blockSignals(False)
 
 
 def run_gui(config: AppConfig, state: AppState):
