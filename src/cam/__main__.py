@@ -29,7 +29,11 @@ def main():
     )
 
     # 3. Generate Initial Stock Heightmap from default state dimensions
-    x, y, z = create_heightmap(state.stock_size_x, state.stock_size_y)
+    x, y, z = create_heightmap(
+        state.stock_size_x, 
+        state.stock_size_y, 
+        resolution=state.stock_resolution
+    )
     state.heightmap_x = x
     state.heightmap_y = y
     state.heightmap_z = z

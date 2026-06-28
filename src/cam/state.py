@@ -20,3 +20,6 @@ class AppState:
     stock_size_x: float = 100.0
     stock_size_y: float = 100.0
     stock_size_z: float = 20.0
+
+    # Add a resolution field (Lower = Better detail, but slower performance)
+    stock_resolution: float = 2.0

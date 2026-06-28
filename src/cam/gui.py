@@ -105,7 +105,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
         self.state.stock_size_y = self.stock_y_input.value()
         self.state.stock_size_z = self.stock_z_input.value()
         
-        x, y, z = create_heightmap(self.state.stock_size_x, self.state.stock_size_y)
+        x, y, z = create_heightmap(self.state.stock_size_x, self.state.stock_size_y, resolution=self.state.stock_resolution)
         self.state.heightmap_x = x
         self.state.heightmap_y = y
         self.state.heightmap_z = z
