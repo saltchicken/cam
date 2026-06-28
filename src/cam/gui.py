@@ -12,6 +12,13 @@ class DpgFrontend:
         self.config = config
         self.state = state
 
+    def _project(self, x, y, z):
+        """Helper to project 3D coordinates using the current view configuration."""
+        return project_iso(x, y, z, 
+                           self.config.view_scale, 
+                           self.config.view_offset_x, 
+                           self.config.view_offset_y)
+
     def update_canvas(self):
         """Clears the drawlist and redraws paths up to current_line."""
         dpg.delete_item("drawlist", children_only=True)
@@ -32,12 +39,8 @@ class DpgFrontend:
 
         for i in range(max_idx):
             start, end, is_rapid, _ = self.state.toolpaths[i]
-            p1 = project_iso(start[0], start[1], start[2],
-                             self.config.view_scale, self.config.view_offset_x,
-                             self.config.view_offset_y)
-            p2 = project_iso(end[0], end[1], end[2], self.config.view_scale,
-                             self.config.view_offset_x,
-                             self.config.view_offset_y)
+            p1 = self._project(*start)
+            p2 = self._project(*end)
 
             color = [255, 140, 0, 200] if is_rapid else [0, 255, 255, 255]
             thickness = 1 if is_rapid else 2
@@ -104,33 +107,56 @@ class DpgFrontend:
         z_3d = (0.0, 0.0, axis_length)
 
         # Project the 3D points to 2D screen coordinates
-        orig_2d = project_iso(*orig_3d, self.config.view_scale, self.config.view_offset_x,
-                             self.config.view_offset_y)
-        x_2d = project_iso(*x_3d, self.config.view_scale, self.config.view_offset_x,
-                             self.config.view_offset_y)
-        y_2d = project_iso(*y_3d, self.config.view_scale, self.config.view_offset_x,
-                             self.config.view_offset_y)
-        z_2d = project_iso(*z_3d, self.config.view_scale, self.config.view_offset_x,
-                             self.config.view_offset_y)
+        orig_2d = self._project(*orig_3d)
+        x_2d = self._project(*x_3d)
+        y_2d = self._project(*y_3d)
+        z_2d = self._project(*z_3d)
 
         if dpg.does_item_exist("drawlist"):
             # X-Axis (Red)
-            dpg.draw_line(orig_2d, x_2d, color=[255, 70, 70, 255], thickness=3, parent="drawlist")
-            dpg.draw_text(x_2d, "X", color=[255, 70, 70, 255], size=16, parent="drawlist")
+            dpg.draw_line(orig_2d,
+                          x_2d,
+                          color=[255, 70, 70, 255],
+                          thickness=3,
+                          parent="drawlist")
+            dpg.draw_text(x_2d,
+                          "X",
+                          color=[255, 70, 70, 255],
+                          size=16,
+                          parent="drawlist")
 
             # Y-Axis (Green)
-            dpg.draw_line(orig_2d, y_2d, color=[70, 255, 70, 255], thickness=3, parent="drawlist")
-            dpg.draw_text(y_2d, "Y", color=[70, 255, 70, 255], size=16, parent="drawlist")
+            dpg.draw_line(orig_2d,
+                          y_2d,
+                          color=[70, 255, 70, 255],
+                          thickness=3,
+                          parent="drawlist")
+            dpg.draw_text(y_2d,
+                          "Y",
+                          color=[70, 255, 70, 255],
+                          size=16,
+                          parent="drawlist")
 
             # Z-Axis (Blue)
-            dpg.draw_line(orig_2d, z_2d, color=[70, 150, 255, 255], thickness=3, parent="drawlist")
-            dpg.draw_text(z_2d, "Z", color=[70, 150, 255, 255], size=16, parent="drawlist")
+            dpg.draw_line(orig_2d,
+                          z_2d,
+                          color=[70, 150, 255, 255],
+                          thickness=3,
+                          parent="drawlist")
+            dpg.draw_text(z_2d,
+                          "Z",
+                          color=[70, 150, 255, 255],
+                          size=16,
+                          parent="drawlist")
 
             # Draw a solid white dot exactly at (0, 0, 0)
-            dpg.draw_circle(orig_2d, radius=4, color=[255, 255, 255, 255], fill=[255, 255, 255, 255], parent="drawlist")
+            dpg.draw_circle(orig_2d,
+                            radius=4,
+                            color=[255, 255, 255, 255],
+                            fill=[255, 255, 255, 255],
+                            parent="drawlist")
         else:
             print("draw_origin error. drawlist does not exist")
-
 
     # --- Main Rendering Loop ---
 
