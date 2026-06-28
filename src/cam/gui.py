@@ -1,104 +1,104 @@
-"""DearPyGui frontend implementation."""
-import dearpygui.dearpygui as dpg
+"""VisPy and PyQt5 frontend implementation."""
+import sys
+import numpy as np
+from PyQt5 import QtWidgets, QtCore
+from vispy import scene
 
 from cam.config import AppConfig
-from cam.graphics import project_iso, generate_stock
+from cam.graphics import generate_stock
 from cam.state import AppState
 
 
-class DpgFrontend:
+class VispyFrontend(QtWidgets.QMainWindow):
 
     def __init__(self, config: AppConfig, state: AppState):
+        super().__init__()
         self.config = config
         self.state = state
-        self.last_mouse_pos = None
-        self.is_dragging_left = False
-        self.is_dragging_right = False
 
-    def _project(self, x, y, z):
-        """Helper to project 3D coordinates using the current view configuration."""
-        return project_iso(x, y, z, 
-                           self.config.view_scale, 
-                           self.config.view_offset_x, 
-                           self.config.view_offset_y,
-                           self.config.view_rot_x,
-                           self.config.view_rot_y,
-                           self.config.view_rot_z)
+        self.setWindowTitle(self.config.window_title)
+        self.resize(self.config.window_width, self.config.window_height)
 
-    def update_canvas(self):
-        """Clears the drawlist and redraws paths up to current_line."""
-        dpg.delete_item("drawlist", children_only=True)
+        central_widget = QtWidgets.QWidget()
+        self.setCentralWidget(central_widget)
+        layout = QtWidgets.QHBoxLayout(central_widget)
 
-        self.draw_origin(axis_length=30.0)
-        self.draw_stock()
+        # Left Panel - Controls
+        control_panel = QtWidgets.QWidget()
+        control_panel.setFixedWidth(300)
+        vbox = QtWidgets.QVBoxLayout(control_panel)
+        layout.addWidget(control_panel)
 
-        max_idx = sum(
-            1 for tp in self.state.toolpaths if tp[3] < self.state.current_line)
+        # Middle - Vispy Canvas
+        self.canvas = scene.SceneCanvas(keys='interactive', show=True)
+        self.view = self.canvas.central_widget.add_view()
+        self.view.camera = 'turntable'
+        self.view.camera.scale_factor = 200
+        layout.addWidget(self.canvas.native)
 
-        if 0 < self.state.current_line <= len(self.state.gcode_lines):
-            text = self.state.gcode_lines[self.state.current_line - 1]
-            dpg.set_value("gcode_listbox", text)
-        else:
-            if self.state.gcode_lines:
-                dpg.set_value("gcode_listbox", self.state.gcode_lines[0])
+        # Right Panel - GCode
+        self.gcode_list = QtWidgets.QListWidget()
+        self.gcode_list.setFixedWidth(280)
+        self.gcode_list.addItems(self.state.gcode_lines)
+        self.gcode_list.currentRowChanged.connect(self.on_listbox_changed)
+        layout.addWidget(self.gcode_list)
 
-        for i in range(max_idx):
-            start, end, is_rapid, _ = self.state.toolpaths[i]
-            p1 = self._project(*start)
-            p2 = self._project(*end)
+        # Controls Setup
+        nav_layout = QtWidgets.QHBoxLayout()
+        btn_prev = QtWidgets.QPushButton("< Prev")
+        btn_next = QtWidgets.QPushButton("Next >")
+        btn_prev.clicked.connect(self.prev_step)
+        btn_next.clicked.connect(self.next_step)
+        nav_layout.addWidget(btn_prev)
+        nav_layout.addWidget(btn_next)
+        vbox.addLayout(nav_layout)
 
-            color = [255, 140, 0, 200] if is_rapid else [0, 255, 255, 255]
-            thickness = 1 if is_rapid else 2
+        vbox.addWidget(QtWidgets.QLabel("Line Step"))
+        self.step_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.step_slider.setMinimum(0)
+        self.step_slider.setMaximum(len(self.state.gcode_lines))
+        self.step_slider.setValue(self.state.current_line)
+        self.step_slider.valueChanged.connect(self.slider_changed)
+        vbox.addWidget(self.step_slider)
 
-            dpg.draw_line(p1,
-                          p2,
-                          color=color,
-                          thickness=thickness,
-                          parent="drawlist")
-
-    # --- UI Callbacks ---
-
-    def next_step(self, _sender=None, _app_data=None):
-        if self.state.current_line < len(self.state.gcode_lines):
-            self.state.current_line += 1
-            dpg.set_value("step_slider", self.state.current_line)
-            self.update_canvas()
-
-    def prev_step(self, _sender=None, _app_data=None):
-        if self.state.current_line > 0:
-            self.state.current_line -= 1
-            dpg.set_value("step_slider", self.state.current_line)
-            self.update_canvas()
-
-    def slider_changed(self, _sender, app_data):
-        self.state.current_line = app_data
-        self.update_canvas()
-
-    def view_changed(self, _sender, app_data, user_data):
-        if user_data == "scale":
-            self.config.view_scale = app_data
-        elif user_data == "offset_x":
-            self.config.view_offset_x = app_data
-        elif user_data == "offset_y":
-            self.config.view_offset_y = app_data
-        elif user_data == "rot_x":
-            self.config.view_rot_x = app_data
-        elif user_data == "rot_y":
-            self.config.view_rot_y = app_data
-        elif user_data == "rot_z":
-            self.config.view_rot_z = app_data
-        self.update_canvas()
+        vbox.addSpacing(20)
+        vbox.addWidget(QtWidgets.QLabel("Stock Dimensions"))
+        stock_layout = QtWidgets.QHBoxLayout()
         
-    def stock_changed(self, _sender, app_data, user_data):
-        """Updates the stock geometry when a user changes the dimensions."""
-        if user_data == "stock_x":
-            self.state.stock_size_x = app_data
-        elif user_data == "stock_y":
-            self.state.stock_size_y = app_data
-        elif user_data == "stock_z":
-            self.state.stock_size_z = app_data
+        self.stock_x_input = QtWidgets.QDoubleSpinBox()
+        self.stock_y_input = QtWidgets.QDoubleSpinBox()
+        self.stock_z_input = QtWidgets.QDoubleSpinBox()
+        
+        for inp, val, label in zip(
+            [self.stock_x_input, self.stock_y_input, self.stock_z_input],
+            [self.state.stock_size_x, self.state.stock_size_y, self.state.stock_size_z],
+            ["X", "Y", "Z"]
+        ):
+            inp_layout = QtWidgets.QVBoxLayout()
+            inp_layout.addWidget(QtWidgets.QLabel(label))
+            inp.setMaximum(10000.0)
+            inp.setValue(val)
+            inp.valueChanged.connect(self.stock_changed)
+            inp_layout.addWidget(inp)
+            stock_layout.addLayout(inp_layout)
             
-        # Regenerate the vertices and faces based on the new sizes
+        vbox.addLayout(stock_layout)
+        vbox.addStretch()
+
+        # Visuals setup
+        self.stock_visual = scene.visuals.Mesh(color=(0.8, 0.8, 0.2, 0.3), parent=self.view.scene)
+        self.rapid_lines = scene.visuals.Line(color='orange', method='gl', parent=self.view.scene)
+        self.cut_lines = scene.visuals.Line(color='cyan', method='gl', parent=self.view.scene)
+        
+        scene.visuals.XYZAxis(parent=self.view.scene)
+
+        self.update_canvas()
+
+    def stock_changed(self):
+        self.state.stock_size_x = self.stock_x_input.value()
+        self.state.stock_size_y = self.stock_y_input.value()
+        self.state.stock_size_z = self.stock_z_input.value()
+        
         verts, faces = generate_stock(
             self.state.stock_size_x, 
             self.state.stock_size_y, 
@@ -106,302 +106,73 @@ class DpgFrontend:
         )
         self.state.stock_vertices = verts
         self.state.stock_faces = faces
-        
         self.update_canvas()
 
-    def listbox_changed(self, _sender, app_data):
-        try:
-            self.state.current_line = self.state.gcode_lines.index(app_data) + 1
-            dpg.set_value("step_slider", self.state.current_line)
-            self.update_canvas()
-        except ValueError:
-            pass
+    def prev_step(self):
+        if self.state.current_line > 0:
+            self.state.current_line -= 1
+            self.step_slider.setValue(self.state.current_line)
 
-    def _sync_view_sliders(self):
-        if dpg.does_item_exist("scale_slider"):
-            dpg.set_value("scale_slider", self.config.view_scale)
-            dpg.set_value("offset_x_slider", self.config.view_offset_x)
-            dpg.set_value("offset_y_slider", self.config.view_offset_y)
-            dpg.set_value("rot_x_slider", self.config.view_rot_x)
-            dpg.set_value("rot_y_slider", self.config.view_rot_y)
-            dpg.set_value("rot_z_slider", self.config.view_rot_z)
+    def next_step(self):
+        if self.state.current_line < len(self.state.gcode_lines):
+            self.state.current_line += 1
+            self.step_slider.setValue(self.state.current_line)
 
-    def on_mouse_move(self, _sender, app_data):
-        current_pos = app_data
-        
-        hovering_canvas = dpg.does_item_exist("drawlist") and dpg.is_item_hovered("drawlist")
-        
-        if dpg.is_mouse_button_down(0):
-            if hovering_canvas and not self.is_dragging_left:
-                self.is_dragging_left = True
-        else:
-            self.is_dragging_left = False
-            
-        if dpg.is_mouse_button_down(1) or dpg.is_mouse_button_down(2):
-            if hovering_canvas and not self.is_dragging_right:
-                self.is_dragging_right = True
-        else:
-            self.is_dragging_right = False
-
-        if self.last_mouse_pos is not None:
-            dx = current_pos[0] - self.last_mouse_pos[0]
-            dy = current_pos[1] - self.last_mouse_pos[1]
-            
-            if self.is_dragging_left:
-                self.config.view_rot_z -= dx * 0.5
-                self.config.view_rot_x -= dy * 0.5
-                
-                if self.config.view_rot_x > 180: self.config.view_rot_x -= 360
-                if self.config.view_rot_x < -180: self.config.view_rot_x += 360
-                if self.config.view_rot_z > 180: self.config.view_rot_z -= 360
-                if self.config.view_rot_z < -180: self.config.view_rot_z += 360
-                
-                self._sync_view_sliders()
-                self.update_canvas()
-            elif self.is_dragging_right:
-                self.config.view_offset_x += dx
-                self.config.view_offset_y += dy
-                self._sync_view_sliders()
-                self.update_canvas()
-
-        self.last_mouse_pos = current_pos
-
-    def on_mouse_wheel(self, _sender, app_data):
-        if dpg.does_item_exist("drawlist") and dpg.is_item_hovered("drawlist"):
-            zoom_factor = 1.0 + (app_data * 0.1)
-            self.config.view_scale *= zoom_factor
-            self.config.view_scale = max(0.01, min(self.config.view_scale, 100.0))
-            self._sync_view_sliders()
-            self.update_canvas()
-
-    def on_resize(self, _sender, _app_data):
-        vp_width = dpg.get_viewport_client_width()
-        vp_height = dpg.get_viewport_client_height()
-
-        if dpg.does_item_exist("drawlist"):
-            dpg.set_item_width("drawlist", max(100, vp_width - 320))
-            dpg.set_item_height("drawlist", max(100, vp_height - 180))
-
-        if dpg.does_item_exist("gcode_listbox"):
-            dpg.configure_item("gcode_listbox",
-                               num_items=max(3, (vp_height - 40) // 18))
-
-    def draw_origin(self, axis_length=25.0):
-        """Draws an RGB coordinate triad at (0,0,0) to indicate the origin."""
-        # Define the 3D points for the origin and the tips of the axes
-        orig_3d = (0.0, 0.0, 0.0)
-        x_3d = (axis_length, 0.0, 0.0)
-        y_3d = (0.0, axis_length, 0.0)
-        z_3d = (0.0, 0.0, axis_length)
-
-        # Project the 3D points to 2D screen coordinates
-        orig_2d = self._project(*orig_3d)
-        x_2d = self._project(*x_3d)
-        y_2d = self._project(*y_3d)
-        z_2d = self._project(*z_3d)
-
-        if dpg.does_item_exist("drawlist"):
-            # X-Axis (Red)
-            dpg.draw_line(orig_2d,
-                          x_2d,
-                          color=[255, 70, 70, 255],
-                          thickness=3,
-                          parent="drawlist")
-            dpg.draw_text(x_2d,
-                          "X",
-                          color=[255, 70, 70, 255],
-                          size=16,
-                          parent="drawlist")
-
-            # Y-Axis (Green)
-            dpg.draw_line(orig_2d,
-                          y_2d,
-                          color=[70, 255, 70, 255],
-                          thickness=3,
-                          parent="drawlist")
-            dpg.draw_text(y_2d,
-                          "Y",
-                          color=[70, 255, 70, 255],
-                          size=16,
-                          parent="drawlist")
-
-            # Z-Axis (Blue)
-            dpg.draw_line(orig_2d,
-                          z_2d,
-                          color=[70, 150, 255, 255],
-                          thickness=3,
-                          parent="drawlist")
-            dpg.draw_text(z_2d,
-                          "Z",
-                          color=[70, 150, 255, 255],
-                          size=16,
-                          parent="drawlist")
-
-            # Draw a solid white dot exactly at (0, 0, 0)
-            dpg.draw_circle(orig_2d,
-                            radius=4,
-                            color=[255, 255, 255, 255],
-                            fill=[255, 255, 255, 255],
-                            parent="drawlist")
-        else:
-            print("draw_origin error. drawlist does not exist")
-
-    def draw_stock(self):
-        """Draws the stock material object onto the drawlist."""
-        if not self.state.stock_vertices or not dpg.does_item_exist("drawlist"):
-            return
-
-        for face in self.state.stock_faces:
-            # Project all 3D vertices of this face to 2D
-            pts_2d = [self._project(*self.state.stock_vertices[i]) for i in face]
-            
-            # Close the loop for the wireframe
-            pts_2d.append(pts_2d[0]) 
-
-            dpg.draw_polyline(
-                pts_2d,
-                color=[200, 200, 50, 150],  # Translucent yellow/gold for stock
-                thickness=1,
-                parent="drawlist"
-            )
-
-    # --- Main Rendering Loop ---
-
-    def run(self):
-        """Initializes and runs the DearPyGui application."""
-        dpg.create_context()
-        dpg.create_viewport(title=self.config.window_title,
-                            width=self.config.window_width,
-                            height=self.config.window_height)
-        dpg.set_viewport_resize_callback(self.on_resize)
-
-        with dpg.handler_registry():
-            dpg.add_mouse_move_handler(callback=self.on_mouse_move)
-            dpg.add_mouse_wheel_handler(callback=self.on_mouse_wheel)
-
-        with dpg.window(tag="primary_window"):
-            with dpg.group(horizontal=True):
-
-                # Left Panel (Controls + Canvas)
-                with dpg.child_window(width=-300, height=-1, border=False):
-                    with dpg.group(horizontal=True):
-                        dpg.add_button(label="< Prev", callback=self.prev_step)
-                        dpg.add_button(label="Next >", callback=self.next_step)
-                        dpg.add_slider_int(
-                            label="Line",
-                            tag="step_slider",
-                            min_value=0,
-                            max_value=len(self.state.gcode_lines),
-                            default_value=self.state.current_line,
-                            callback=self.slider_changed,
-                            width=250)
-
-                    with dpg.group(horizontal=True):
-                        dpg.add_slider_float(
-                            label="Scale",
-                            tag="scale_slider",
-                            min_value=0.1,
-                            max_value=100.0,
-                            default_value=self.config.view_scale,
-                            callback=self.view_changed,
-                            user_data="scale",
-                            width=120)
-                        dpg.add_slider_float(
-                            label="Offset X",
-                            tag="offset_x_slider",
-                            min_value=-5000.0,
-                            max_value=5000.0,
-                            default_value=self.config.view_offset_x,
-                            callback=self.view_changed,
-                            user_data="offset_x",
-                            width=120)
-                        dpg.add_slider_float(
-                            label="Offset Y",
-                            tag="offset_y_slider",
-                            min_value=-5000.0,
-                            max_value=5000.0,
-                            default_value=self.config.view_offset_y,
-                            callback=self.view_changed,
-                            user_data="offset_y",
-                            width=120)
-                        dpg.add_slider_float(
-                            label="Rot X",
-                            tag="rot_x_slider",
-                            min_value=-180.0,
-                            max_value=180.0,
-                            default_value=self.config.view_rot_x,
-                            callback=self.view_changed,
-                            user_data="rot_x",
-                            width=120)
-                        dpg.add_slider_float(
-                            label="Rot Y",
-                            tag="rot_y_slider",
-                            min_value=-180.0,
-                            max_value=180.0,
-                            default_value=self.config.view_rot_y,
-                            callback=self.view_changed,
-                            user_data="rot_y",
-                            width=120)
-                        dpg.add_slider_float(
-                            label="Rot Z",
-                            tag="rot_z_slider",
-                            min_value=-180.0,
-                            max_value=180.0,
-                            default_value=self.config.view_rot_z,
-                            callback=self.view_changed,
-                            user_data="rot_z",
-                            width=120)
-
-                    dpg.add_separator()
-                    
-                    # Stock Settings UI
-                    dpg.add_text("Stock Dimensions")
-                    with dpg.group(horizontal=True):
-                        dpg.add_input_float(
-                            label="Width (X)", 
-                            default_value=self.state.stock_size_x,
-                            callback=self.stock_changed,
-                            user_data="stock_x",
-                            width=100
-                        )
-                        dpg.add_input_float(
-                            label="Height (Y)", 
-                            default_value=self.state.stock_size_y,
-                            callback=self.stock_changed,
-                            user_data="stock_y",
-                            width=100
-                        )
-                        dpg.add_input_float(
-                            label="Depth (Z)", 
-                            default_value=self.state.stock_size_z,
-                            callback=self.stock_changed,
-                            user_data="stock_z",
-                            width=100
-                        )
-
-                    dpg.add_separator()
-
-                    with dpg.drawlist(tag="drawlist", width=700, height=650):
-                        pass
-
-                # Right Panel (G-Code List)
-                with dpg.child_window(width=280, height=-1, border=False):
-                    dpg.add_listbox(items=self.state.gcode_lines,
-                                    tag="gcode_listbox",
-                                    width=-1,
-                                    num_items=35,
-                                    callback=self.listbox_changed)
-
+    def slider_changed(self, value):
+        self.state.current_line = value
         self.update_canvas()
-        dpg.setup_dearpygui()
-        dpg.show_viewport()
-        dpg.set_primary_window("primary_window", True)
-        self.on_resize(None, None)
-        dpg.start_dearpygui()
-        dpg.destroy_context()
+
+    def on_listbox_changed(self, row):
+        self.state.current_line = row + 1
+        self.step_slider.blockSignals(True)
+        self.step_slider.setValue(self.state.current_line)
+        self.step_slider.blockSignals(False)
+        self.update_canvas()
+
+    def update_canvas(self):
+        # Update stock mesh
+        if self.state.stock_vertices and self.state.stock_faces:
+            v_array = np.array(self.state.stock_vertices, dtype=np.float32)
+            triangles = []
+            for face in self.state.stock_faces:
+                triangles.append([face[0], face[1], face[2]])
+                triangles.append([face[0], face[2], face[3]])
+            f_array = np.array(triangles, dtype=np.uint32)
+            self.stock_visual.set_data(vertices=v_array, faces=f_array)
+
+        # Update toolpaths
+        max_idx = sum(1 for tp in self.state.toolpaths if tp[3] < self.state.current_line)
+
+        rapid_pts = []
+        cut_pts = []
+
+        for i in range(max_idx):
+            start, end, is_rapid, _ = self.state.toolpaths[i]
+            if is_rapid:
+                rapid_pts.extend([start, end])
+            else:
+                cut_pts.extend([start, end])
+
+        if rapid_pts:
+            self.rapid_lines.set_data(pos=np.array(rapid_pts, dtype=np.float32), connect='segments')
+        else:
+            self.rapid_lines.set_data(pos=np.zeros((0, 3), dtype=np.float32))
+
+        if cut_pts:
+            self.cut_lines.set_data(pos=np.array(cut_pts, dtype=np.float32), connect='segments')
+        else:
+            self.cut_lines.set_data(pos=np.zeros((0, 3), dtype=np.float32))
+
+        # Update G-code list selection
+        if 0 < self.state.current_line <= len(self.state.gcode_lines):
+            self.gcode_list.blockSignals(True)
+            self.gcode_list.setCurrentRow(self.state.current_line - 1)
+            self.gcode_list.blockSignals(False)
 
 
 def run_gui(config: AppConfig, state: AppState):
     """Entry point wrapper to run the frontend."""
-    app = DpgFrontend(config, state)
-    app.run()
+    app = QtWidgets.QApplication(sys.argv)
+    window = VispyFrontend(config, state)
+    window.show()
+    sys.exit(app.exec_())
