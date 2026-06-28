@@ -60,3 +60,54 @@ def carve_toolpaths(z_map, x_coords, y_coords, toolpaths, max_idx, tool_radius=2
             dist = np.sqrt((XX - px)**2 + (YY - py)**2)
             mask = dist <= tool_radius
             z_sub[mask] = np.minimum(z_sub[mask], pz[mask])
+
+def get_skirt_mesh(x, y, z, z_bottom):
+    """Generates vertices and faces for the walls and bottom of the stock."""
+    nx = len(x)
+    ny = len(y)
+
+    vertices = []
+    faces = []
+    idx = 0
+
+    # Helper to add a strip of walls
+    def add_wall(x_coords, y_coords, z_coords):
+        nonlocal idx
+        n = len(x_coords)
+        
+        # Top vertices
+        for i in range(n):
+            vertices.append([x_coords[i], y_coords[i], z_coords[i]])
+        # Bottom vertices
+        for i in range(n):
+            vertices.append([x_coords[i], y_coords[i], z_bottom])
+
+        # Generate triangles
+        for i in range(n - 1):
+            t1, t2 = idx + i, idx + i + 1
+            b1, b2 = idx + n + i, idx + n + i + 1
+            faces.append([t1, b1, t2])
+            faces.append([t2, b1, b2])
+
+        idx += 2 * n
+
+    # Draw the 4 side walls tracking the edge Z coordinates
+    add_wall(np.full(ny, x[0]), y, z[0, :])             # -X Wall
+    add_wall(np.full(ny, x[-1]), y[::-1], z[-1, ::-1])  # +X Wall
+    add_wall(x[::-1], np.full(nx, y[0]), z[::-1, 0])    # -Y Wall
+    add_wall(x, np.full(nx, y[-1]), z[:, -1])           # +Y Wall
+
+    # Add the single bottom face closing the box
+    b_idx = idx
+    vertices.extend([
+        [x[0], y[0], z_bottom],
+        [x[-1], y[0], z_bottom],
+        [x[-1], y[-1], z_bottom],
+        [x[0], y[-1], z_bottom]
+    ])
+    faces.extend([
+        [b_idx, b_idx+2, b_idx+1],
+        [b_idx, b_idx+3, b_idx+2]
+    ])
+
+    return np.array(vertices, dtype=np.float32), np.array(faces, dtype=np.uint32)

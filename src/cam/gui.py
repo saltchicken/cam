@@ -5,7 +5,7 @@ from PyQt5 import QtWidgets, QtCore
 from vispy import scene
 
 from cam.config import AppConfig
-from cam.graphics import create_heightmap, carve_toolpaths
+from cam.graphics import create_heightmap, carve_toolpaths, get_skirt_mesh
 from cam.state import AppState
 
 
@@ -93,6 +93,13 @@ class VispyFrontend(QtWidgets.QMainWindow):
             color=(0.8, 0.8, 0.2, 1.0),
             parent=self.view.scene
         )
+        
+        # New Skirt Visual for solid rendering (darkened slightly for visual contrast)
+        self.skirt_visual = scene.visuals.Mesh(
+            color=(0.7, 0.7, 0.15, 1.0),
+            parent=self.view.scene
+        )
+
         self.rapid_lines = scene.visuals.Line(color='orange', method='gl', parent=self.view.scene)
         self.cut_lines = scene.visuals.Line(color='cyan', method='gl', parent=self.view.scene)
         
@@ -149,6 +156,15 @@ class VispyFrontend(QtWidgets.QMainWindow):
                 tool_radius=2.0
             )
             self.stock_visual.set_data(z=self.state.heightmap_z)
+            
+            # Update the solid skirt dynamically based on carved depth
+            v, f = get_skirt_mesh(
+                self.state.heightmap_x, 
+                self.state.heightmap_y, 
+                self.state.heightmap_z, 
+                z_bottom=-self.state.stock_size_z
+            )
+            self.skirt_visual.set_data(vertices=v, faces=f)
 
         rapid_pts = []
         cut_pts = []
