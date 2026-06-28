@@ -4,8 +4,8 @@ from dataclasses import dataclass
 @dataclass
 class AppConfig:
     view_scale: float = 4.0
-    view_offset_x: float = 300.0
-    view_offset_y: float = 600.0
+    view_offset_x: float = 960.0
+    view_offset_y: float = 540.0
     view_rot_x: float = 60.0
     view_rot_y: float = 0.0
     view_rot_z: float = 45.0
