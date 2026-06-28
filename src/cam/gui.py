@@ -120,7 +120,7 @@ class DpgFrontend:
 
         if dpg.does_item_exist("drawlist"):
             dpg.set_item_width("drawlist", max(100, vp_width - 320))
-            dpg.set_item_height("drawlist", max(100, vp_height - 80))
+            dpg.set_item_height("drawlist", max(100, vp_height - 180))
 
         if dpg.does_item_exist("gcode_listbox"):
             dpg.configure_item("gcode_listbox",
@@ -326,6 +326,7 @@ class DpgFrontend:
         dpg.setup_dearpygui()
         dpg.show_viewport()
         dpg.set_primary_window("primary_window", True)
+        self.on_resize(None, None)
         dpg.start_dearpygui()
         dpg.destroy_context()
 
