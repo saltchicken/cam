@@ -5,7 +5,7 @@ from PyQt5 import QtWidgets, QtCore
 from vispy import scene
 
 from cam.config import AppConfig
-from cam.graphics import generate_stock
+from cam.graphics import create_heightmap, carve_toolpaths
 from cam.state import AppState
 
 
@@ -86,7 +86,13 @@ class VispyFrontend(QtWidgets.QMainWindow):
         vbox.addStretch()
 
         # Visuals setup
-        self.stock_visual = scene.visuals.Mesh(color=(0.8, 0.8, 0.2, 0.3), parent=self.view.scene)
+        self.stock_visual = scene.visuals.SurfacePlot(
+            x=self.state.heightmap_x,
+            y=self.state.heightmap_y,
+            z=self.state.heightmap_z,
+            color=(0.8, 0.8, 0.2, 1.0),
+            parent=self.view.scene
+        )
         self.rapid_lines = scene.visuals.Line(color='orange', method='gl', parent=self.view.scene)
         self.cut_lines = scene.visuals.Line(color='cyan', method='gl', parent=self.view.scene)
         
@@ -99,13 +105,12 @@ class VispyFrontend(QtWidgets.QMainWindow):
         self.state.stock_size_y = self.stock_y_input.value()
         self.state.stock_size_z = self.stock_z_input.value()
         
-        verts, faces = generate_stock(
-            self.state.stock_size_x, 
-            self.state.stock_size_y, 
-            self.state.stock_size_z
-        )
-        self.state.stock_vertices = verts
-        self.state.stock_faces = faces
+        x, y, z = create_heightmap(self.state.stock_size_x, self.state.stock_size_y)
+        self.state.heightmap_x = x
+        self.state.heightmap_y = y
+        self.state.heightmap_z = z
+        
+        self.stock_visual.set_data(x=x, y=y, z=z)
         self.update_canvas()
 
     def prev_step(self):
@@ -130,18 +135,20 @@ class VispyFrontend(QtWidgets.QMainWindow):
         self.update_canvas()
 
     def update_canvas(self):
-        # Update stock mesh
-        if self.state.stock_vertices and self.state.stock_faces:
-            v_array = np.array(self.state.stock_vertices, dtype=np.float32)
-            triangles = []
-            for face in self.state.stock_faces:
-                triangles.append([face[0], face[1], face[2]])
-                triangles.append([face[0], face[2], face[3]])
-            f_array = np.array(triangles, dtype=np.uint32)
-            self.stock_visual.set_data(vertices=v_array, faces=f_array)
-
-        # Update toolpaths
+        # Update toolpaths limit
         max_idx = sum(1 for tp in self.state.toolpaths if tp[3] < self.state.current_line)
+        
+        # Update stock heightmap
+        if self.state.heightmap_z is not None:
+            carve_toolpaths(
+                self.state.heightmap_z,
+                self.state.heightmap_x,
+                self.state.heightmap_y,
+                self.state.toolpaths,
+                max_idx,
+                tool_radius=2.0
+            )
+            self.stock_visual.set_data(z=self.state.heightmap_z)
 
         rapid_pts = []
         cut_pts = []

@@ -1,6 +1,7 @@
 """Application state management."""
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import List, Tuple, Any
+import numpy as np
 
 
 @dataclass
@@ -9,8 +10,9 @@ class AppState:
     # toolpaths format: (start_pt, end_pt, is_rapid, line_idx)
     toolpaths: List[Tuple[List[float], List[float], bool, int]] = field(default_factory=list)
     
-    stock_vertices: List[Tuple[float, float, float]] = field(default_factory=list)
-    stock_faces: List[Tuple[int, ...]] = field(default_factory=list)
+    heightmap_x: Any = None
+    heightmap_y: Any = None
+    heightmap_z: Any = None
 
     current_line: int = 0
     

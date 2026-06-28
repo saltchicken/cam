@@ -1,34 +1,62 @@
 """Math and rendering utilities."""
 
-def generate_stock(size_x, size_y, size_z):
-    """Generates a 3D stock bounding box based on explicit dimensions."""
-    
-    # Assuming origin (0,0) is bottom-left and Z=0 is the top of the stock.
-    min_x, min_y = 0.0, 0.0
-    max_x, max_y = size_x, size_y
-    min_z = -size_z
-    max_z = 0.0
+import numpy as np
 
-    # Define the 8 vertices of the rectangular prism
-    vertices = [
-        (min_x, min_y, min_z),  # 0: Bottom-front-left
-        (max_x, min_y, min_z),  # 1: Bottom-front-right
-        (max_x, max_y, min_z),  # 2: Bottom-back-right
-        (min_x, max_y, min_z),  # 3: Bottom-back-left
-        (min_x, min_y, max_z),  # 4: Top-front-left
-        (max_x, min_y, max_z),  # 5: Top-front-right
-        (max_x, max_y, max_z),  # 6: Top-back-right
-        (min_x, max_y, max_z),  # 7: Top-back-left
-    ]
+def create_heightmap(size_x, size_y, resolution=1.0):
+    """Generates 2D arrays for X, Y, and Z heightmap."""
+    nx = int(np.ceil(size_x / resolution)) + 1
+    ny = int(np.ceil(size_y / resolution)) + 1
+    x = np.linspace(0, size_x, nx)
+    y = np.linspace(0, size_y, ny)
+    z = np.zeros((nx, ny), dtype=np.float32)
+    return x, y, z
 
-    # Define the 6 faces (quads) connecting the vertices
-    faces = [
-        (0, 1, 2, 3),  # Bottom
-        (4, 5, 6, 7),  # Top
-        (0, 1, 5, 4),  # Front
-        (1, 2, 6, 5),  # Right
-        (2, 3, 7, 6),  # Back
-        (3, 0, 4, 7),  # Left
-    ]
+def carve_toolpaths(z_map, x_coords, y_coords, toolpaths, max_idx, tool_radius=2.0):
+    """Updates the Z heightmap based on the toolpaths up to max_idx."""
+    z_map.fill(0.0)
+    if max_idx == 0:
+        return
 
-    return vertices, faces
+    for i in range(max_idx):
+        start, end, is_rapid, _ = toolpaths[i]
+        if is_rapid:
+            continue
+
+        x1, y1, z1 = start
+        x2, y2, z2 = end
+
+        min_x, max_x = min(x1, x2) - tool_radius, max(x1, x2) + tool_radius
+        min_y, max_y = min(y1, y2) - tool_radius, max(y1, y2) + tool_radius
+
+        ix_min = max(0, np.searchsorted(x_coords, min_x) - 1)
+        ix_max = min(len(x_coords), np.searchsorted(x_coords, max_x) + 1)
+        iy_min = max(0, np.searchsorted(y_coords, min_y) - 1)
+        iy_max = min(len(y_coords), np.searchsorted(y_coords, max_y) + 1)
+
+        if ix_min >= ix_max or iy_min >= iy_max:
+            continue
+
+        X = x_coords[ix_min:ix_max]
+        Y = y_coords[iy_min:iy_max]
+        XX, YY = np.meshgrid(X, Y, indexing='ij')
+
+        dx = x2 - x1
+        dy = y2 - y1
+        l2 = dx*dx + dy*dy
+
+        z_sub = z_map[ix_min:ix_max, iy_min:iy_max]
+
+        if l2 == 0:
+            dist = np.sqrt((XX - x1)**2 + (YY - y1)**2)
+            mask = dist <= tool_radius
+            z_sub[mask] = np.minimum(z_sub[mask], z1)
+        else:
+            t = ((XX - x1) * dx + (YY - y1) * dy) / l2
+            t = np.clip(t, 0.0, 1.0)
+            px = x1 + t * dx
+            py = y1 + t * dy
+            pz = z1 + t * (z2 - z1)
+
+            dist = np.sqrt((XX - px)**2 + (YY - py)**2)
+            mask = dist <= tool_radius
+            z_sub[mask] = np.minimum(z_sub[mask], pz[mask])

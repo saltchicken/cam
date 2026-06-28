@@ -5,7 +5,7 @@ import sys
 from cam.config import AppConfig
 from cam.gui import run_gui
 from cam.parser import parse_gcode
-from cam.graphics import generate_stock
+from cam.graphics import create_heightmap
 from cam.state import AppState
 
 
@@ -28,14 +28,11 @@ def main():
         toolpaths=toolpaths
     )
 
-    # 3. Generate Initial Stock from default state dimensions
-    stock_verts, stock_faces = generate_stock(
-        state.stock_size_x, 
-        state.stock_size_y, 
-        state.stock_size_z
-    )
-    state.stock_vertices = stock_verts
-    state.stock_faces = stock_faces
+    # 3. Generate Initial Stock Heightmap from default state dimensions
+    x, y, z = create_heightmap(state.stock_size_x, state.stock_size_y)
+    state.heightmap_x = x
+    state.heightmap_y = y
+    state.heightmap_z = z
 
     # 4. Launch Frontend
     run_gui(config, state)
