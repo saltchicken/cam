@@ -16,6 +16,8 @@ class DpgFrontend:
         """Clears the drawlist and redraws paths up to current_line."""
         dpg.delete_item("drawlist", children_only=True)
 
+        self.draw_origin(axis_length=30.0)
+
         max_idx = sum(
             1 for tp in self.state.toolpaths if tp[3] < self.state.current_line)
 
@@ -92,6 +94,43 @@ class DpgFrontend:
         if dpg.does_item_exist("gcode_listbox"):
             dpg.configure_item("gcode_listbox",
                                num_items=max(3, (vp_height - 40) // 18))
+
+    def draw_origin(self, axis_length=25.0):
+        """Draws an RGB coordinate triad at (0,0,0) to indicate the origin."""
+        # Define the 3D points for the origin and the tips of the axes
+        orig_3d = (0.0, 0.0, 0.0)
+        x_3d = (axis_length, 0.0, 0.0)
+        y_3d = (0.0, axis_length, 0.0)
+        z_3d = (0.0, 0.0, axis_length)
+
+        # Project the 3D points to 2D screen coordinates
+        orig_2d = project_iso(*orig_3d, self.config.view_scale, self.config.view_offset_x,
+                             self.config.view_offset_y)
+        x_2d = project_iso(*x_3d, self.config.view_scale, self.config.view_offset_x,
+                             self.config.view_offset_y)
+        y_2d = project_iso(*y_3d, self.config.view_scale, self.config.view_offset_x,
+                             self.config.view_offset_y)
+        z_2d = project_iso(*z_3d, self.config.view_scale, self.config.view_offset_x,
+                             self.config.view_offset_y)
+
+        if dpg.does_item_exist("drawlist"):
+            # X-Axis (Red)
+            dpg.draw_line(orig_2d, x_2d, color=[255, 70, 70, 255], thickness=3, parent="drawlist")
+            dpg.draw_text(x_2d, "X", color=[255, 70, 70, 255], size=16, parent="drawlist")
+
+            # Y-Axis (Green)
+            dpg.draw_line(orig_2d, y_2d, color=[70, 255, 70, 255], thickness=3, parent="drawlist")
+            dpg.draw_text(y_2d, "Y", color=[70, 255, 70, 255], size=16, parent="drawlist")
+
+            # Z-Axis (Blue)
+            dpg.draw_line(orig_2d, z_2d, color=[70, 150, 255, 255], thickness=3, parent="drawlist")
+            dpg.draw_text(z_2d, "Z", color=[70, 150, 255, 255], size=16, parent="drawlist")
+
+            # Draw a solid white dot exactly at (0, 0, 0)
+            dpg.draw_circle(orig_2d, radius=4, color=[255, 255, 255, 255], fill=[255, 255, 255, 255], parent="drawlist")
+        else:
+            print("draw_origin error. drawlist does not exist")
+
 
     # --- Main Rendering Loop ---
 
