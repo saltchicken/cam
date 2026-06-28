@@ -17,7 +17,10 @@ class DpgFrontend:
         return project_iso(x, y, z, 
                            self.config.view_scale, 
                            self.config.view_offset_x, 
-                           self.config.view_offset_y)
+                           self.config.view_offset_y,
+                           self.config.view_rot_x,
+                           self.config.view_rot_y,
+                           self.config.view_rot_z)
 
     def update_canvas(self):
         """Clears the drawlist and redraws paths up to current_line."""
@@ -74,6 +77,12 @@ class DpgFrontend:
             self.config.view_offset_x = app_data
         elif user_data == "offset_y":
             self.config.view_offset_y = app_data
+        elif user_data == "rot_x":
+            self.config.view_rot_x = app_data
+        elif user_data == "rot_y":
+            self.config.view_rot_y = app_data
+        elif user_data == "rot_z":
+            self.config.view_rot_z = app_data
         self.update_canvas()
 
     def listbox_changed(self, _sender, app_data):
@@ -194,19 +203,43 @@ class DpgFrontend:
                             width=120)
                         dpg.add_slider_float(
                             label="Offset X",
-                            min_value=-1000.0,
-                            max_value=2000.0,
+                            min_value=-5000.0,
+                            max_value=5000.0,
                             default_value=self.config.view_offset_x,
                             callback=self.view_changed,
                             user_data="offset_x",
                             width=120)
                         dpg.add_slider_float(
                             label="Offset Y",
-                            min_value=-1000.0,
-                            max_value=2000.0,
+                            min_value=-5000.0,
+                            max_value=5000.0,
                             default_value=self.config.view_offset_y,
                             callback=self.view_changed,
                             user_data="offset_y",
+                            width=120)
+                        dpg.add_slider_float(
+                            label="Rot X",
+                            min_value=-180.0,
+                            max_value=180.0,
+                            default_value=self.config.view_rot_x,
+                            callback=self.view_changed,
+                            user_data="rot_x",
+                            width=120)
+                        dpg.add_slider_float(
+                            label="Rot Y",
+                            min_value=-180.0,
+                            max_value=180.0,
+                            default_value=self.config.view_rot_y,
+                            callback=self.view_changed,
+                            user_data="rot_y",
+                            width=120)
+                        dpg.add_slider_float(
+                            label="Rot Z",
+                            min_value=-180.0,
+                            max_value=180.0,
+                            default_value=self.config.view_rot_z,
+                            callback=self.view_changed,
+                            user_data="rot_z",
                             width=120)
 
                     dpg.add_separator()
