@@ -27,6 +27,7 @@ class DpgFrontend:
         dpg.delete_item("drawlist", children_only=True)
 
         self.draw_origin(axis_length=30.0)
+        self.draw_stock()
 
         max_idx = sum(
             1 for tp in self.state.toolpaths if tp[3] < self.state.current_line)
@@ -164,6 +165,25 @@ class DpgFrontend:
                             parent="drawlist")
         else:
             print("draw_origin error. drawlist does not exist")
+
+    def draw_stock(self):
+        """Draws the stock material object onto the drawlist."""
+        if not self.state.stock_vertices or not dpg.does_item_exist("drawlist"):
+            return
+
+        for face in self.state.stock_faces:
+            # Project all 3D vertices of this face to 2D
+            pts_2d = [self._project(*self.state.stock_vertices[i]) for i in face]
+            
+            # Close the loop for the wireframe
+            pts_2d.append(pts_2d[0]) 
+
+            dpg.draw_polyline(
+                pts_2d,
+                color=[200, 200, 50, 150],  # Translucent yellow/gold for stock
+                thickness=1,
+                parent="drawlist"
+            )
 
     # --- Main Rendering Loop ---
 

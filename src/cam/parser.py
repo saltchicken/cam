@@ -89,3 +89,23 @@ def parse_gcode(file_path):
                 toolpaths.append((start_pt, end_pt, is_rapid, line_idx))
 
     return gcode_lines, toolpaths
+
+def parse_obj(file_path):
+    """Parse a simple .obj file for vertices and faces."""
+    vertices = []
+    faces = []
+    
+    with open(file_path, 'r', encoding="utf-8") as f:
+        for line in f:
+            if line.startswith('v '):
+                parts = line.strip().split()
+                # Store (x, y, z)
+                vertices.append((float(parts[1]), float(parts[2]), float(parts[3])))
+            elif line.startswith('f '):
+                parts = line.strip().split()
+                # OBJ faces are 1-indexed, and can contain texture/normal data like 1/1/1
+                # We only need the first integer (the vertex index)
+                face = tuple(int(p.split('/')[0]) - 1 for p in parts[1:])
+                faces.append(face)
+                
+    return vertices, faces

@@ -1,0 +1,28 @@
+# Stock Material
+# Dimensions: X=500mm, Y=600mm, Z=5mm (Top at Z=0, Bottom at Z=-5)
+
+# Vertices (Bottom Face, Z=-5)
+v 0.0 0.0 -5.0
+v 500.0 0.0 -5.0
+v 500.0 600.0 -5.0
+v 0.0 600.0 -5.0
+
+# Vertices (Top Face, Z=0)
+v 0.0 0.0 0.0
+v 500.0 0.0 0.0
+v 500.0 600.0 0.0
+v 0.0 600.0 0.0
+
+# Faces (Using 1-based indexing for OBJ format)
+# Bottom Face
+f 1 4 3 2
+# Top Face
+f 5 6 7 8
+# Front Face
+f 1 2 6 5
+# Right Face
+f 2 3 7 6
+# Back Face
+f 3 4 8 7
+# Left Face
+f 4 1 5 8
