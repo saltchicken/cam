@@ -10,6 +10,6 @@ class AppConfig:
     view_rot_y: float = 0.0
     view_rot_z: float = 45.0
 
-    window_width: int = 1024
-    window_height: int = 768
+    window_width: int = 1920
+    window_height: int = 1080
     window_title: str = "cam"
