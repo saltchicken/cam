@@ -1,6 +1,5 @@
 """Application state management."""
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 from typing import List, Tuple
 
 
@@ -14,3 +13,8 @@ class AppState:
     stock_faces: List[Tuple[int, ...]] = field(default_factory=list)
 
     current_line: int = 0
+    
+    # Explicit stock dimensions
+    stock_size_x: float = 100.0
+    stock_size_y: float = 100.0
+    stock_size_z: float = 20.0

@@ -2,7 +2,7 @@
 import dearpygui.dearpygui as dpg
 
 from cam.config import AppConfig
-from cam.graphics import project_iso
+from cam.graphics import project_iso, generate_stock
 from cam.state import AppState
 
 
@@ -84,6 +84,26 @@ class DpgFrontend:
             self.config.view_rot_y = app_data
         elif user_data == "rot_z":
             self.config.view_rot_z = app_data
+        self.update_canvas()
+        
+    def stock_changed(self, _sender, app_data, user_data):
+        """Updates the stock geometry when a user changes the dimensions."""
+        if user_data == "stock_x":
+            self.state.stock_size_x = app_data
+        elif user_data == "stock_y":
+            self.state.stock_size_y = app_data
+        elif user_data == "stock_z":
+            self.state.stock_size_z = app_data
+            
+        # Regenerate the vertices and faces based on the new sizes
+        verts, faces = generate_stock(
+            self.state.stock_size_x, 
+            self.state.stock_size_y, 
+            self.state.stock_size_z
+        )
+        self.state.stock_vertices = verts
+        self.state.stock_faces = faces
+        
         self.update_canvas()
 
     def listbox_changed(self, _sender, app_data):
@@ -261,6 +281,33 @@ class DpgFrontend:
                             callback=self.view_changed,
                             user_data="rot_z",
                             width=120)
+
+                    dpg.add_separator()
+                    
+                    # Stock Settings UI
+                    dpg.add_text("Stock Dimensions")
+                    with dpg.group(horizontal=True):
+                        dpg.add_input_float(
+                            label="Width (X)", 
+                            default_value=self.state.stock_size_x,
+                            callback=self.stock_changed,
+                            user_data="stock_x",
+                            width=100
+                        )
+                        dpg.add_input_float(
+                            label="Height (Y)", 
+                            default_value=self.state.stock_size_y,
+                            callback=self.stock_changed,
+                            user_data="stock_y",
+                            width=100
+                        )
+                        dpg.add_input_float(
+                            label="Depth (Z)", 
+                            default_value=self.state.stock_size_z,
+                            callback=self.stock_changed,
+                            user_data="stock_z",
+                            width=100
+                        )
 
                     dpg.add_separator()
 

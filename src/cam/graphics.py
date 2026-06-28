@@ -43,31 +43,15 @@ def project_iso(x, y, z, scale, offset_x, offset_y, rot_x_deg, rot_y_deg, rot_z_
     
     return [screen_x, screen_y]
 
-def generate_stock(toolpaths, margin_xy=5.0, margin_z=2.0):
-    """Generates a procedural 3D stock bounding box from the toolpaths."""
-    if not toolpaths:
-        return [], []
 
-    min_x = min_y = min_z = float('inf')
-    max_x = max_y = max_z = float('-inf')
-
-    for start, end, _, _ in toolpaths:
-        min_x = min(min_x, start[0], end[0])
-        max_x = max(max_x, start[0], end[0])
-        min_y = min(min_y, start[1], end[1])
-        max_y = max(max_y, start[1], end[1])
-        min_z = min(min_z, start[2], end[2])
-        max_z = max(max_z, start[2], end[2])
-
-    # Apply margins to create a comfortable bounding box
-    min_x -= margin_xy
-    max_x += margin_xy
-    min_y -= margin_xy
-    max_y += margin_xy
-    min_z -= margin_z
+def generate_stock(size_x, size_y, size_z):
+    """Generates a 3D stock bounding box based on explicit dimensions."""
     
-    # In CNC, the top of the stock is usually Z=0, or the highest movement height
-    max_z = max(0.0, max_z)
+    # Assuming origin (0,0) is bottom-left and Z=0 is the top of the stock.
+    min_x, min_y = 0.0, 0.0
+    max_x, max_y = size_x, size_y
+    min_z = -size_z
+    max_z = 0.0
 
     # Define the 8 vertices of the rectangular prism
     vertices = [
