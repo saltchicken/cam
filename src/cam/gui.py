@@ -50,7 +50,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
         # ==========================================
         # BOTTOM PANEL: Controls Box
         # ==========================================
-        control_panel = QtWidgets.QGroupBox("Controls Setup")
+        control_panel = QtWidgets.QGroupBox("")
         controls_layout = QtWidgets.QHBoxLayout(control_panel)
         main_layout.addWidget(control_panel)
 
