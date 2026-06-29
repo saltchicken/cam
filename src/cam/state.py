@@ -16,6 +16,9 @@ class AppState:
 
     current_line: int = 0
     
+    # Dynamic tool radius retrieved from metadata or CLI fallback
+    tool_radius: float = 2.0
+    
     # Explicit stock dimensions
     stock_size_x: float = 100.0
     stock_size_y: float = 100.0

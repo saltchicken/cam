@@ -181,7 +181,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
                 self.state.heightmap_y,
                 self.state.toolpaths,
                 max_idx,
-                tool_radius=2.0
+                tool_radius=self.state.tool_radius # <-- Replace hardcoded 2.0 here
             )
             self.stock_visual.set_data(z=self.state.heightmap_z)
             

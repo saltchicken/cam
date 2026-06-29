@@ -9,10 +9,20 @@ def parse_gcode(file_path):
     gcode_lines = []
     current_pos = [0.0, 0.0, 0.0]
     current_g = "G0"
+    
+    parsed_radius = None
 
     with open(file_path, 'r', encoding="utf-8") as f:
         for line in f:
             raw_line = line.strip()
+            
+            # 1. Look for the embedded metadata tag
+            if parsed_radius is None:
+                meta_match = re.search(r'\(META:\s*TOOL_DIA=([\d.]+)\)', raw_line, re.IGNORECASE)
+                if meta_match:
+                    parsed_radius = float(meta_match.group(1)) / 2.0
+
+            # 2. Standard clean up
             line_clean = raw_line.upper().split(';')[0].split('(')[0].strip()
 
             if not line_clean:
@@ -88,24 +98,7 @@ def parse_gcode(file_path):
             else:
                 toolpaths.append((start_pt, end_pt, is_rapid, line_idx))
 
-    return gcode_lines, toolpaths
+    return gcode_lines, toolpaths, parsed_radius
 
-def parse_obj(file_path):
-    """Parse a simple .obj file for vertices and faces."""
-    vertices = []
-    faces = []
-    
-    with open(file_path, 'r', encoding="utf-8") as f:
-        for line in f:
-            if line.startswith('v '):
-                parts = line.strip().split()
-                # Store (x, y, z)
-                vertices.append((float(parts[1]), float(parts[2]), float(parts[3])))
-            elif line.startswith('f '):
-                parts = line.strip().split()
-                # OBJ faces are 1-indexed, and can contain texture/normal data like 1/1/1
-                # We only need the first integer (the vertex index)
-                face = tuple(int(p.split('/')[0]) - 1 for p in parts[1:])
-                faces.append(face)
-                
-    return vertices, faces
+# def parse_obj(file_path): 
+#    ... (keep your existing parse_obj here)
