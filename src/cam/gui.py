@@ -21,29 +21,40 @@ class VispyFrontend(QtWidgets.QMainWindow):
 
         central_widget = QtWidgets.QWidget()
         self.setCentralWidget(central_widget)
-        layout = QtWidgets.QHBoxLayout(central_widget)
+        
+        # Main Layout remains Vertical
+        main_layout = QtWidgets.QVBoxLayout(central_widget)
 
-        # Left Panel - Controls
-        control_panel = QtWidgets.QWidget()
-        control_panel.setFixedWidth(300)
-        vbox = QtWidgets.QVBoxLayout(control_panel)
-        layout.addWidget(control_panel)
+        # ==========================================
+        # TOP VIEW: Canvas and G-Code List
+        # ==========================================
+        view_layout = QtWidgets.QHBoxLayout()
+        main_layout.addLayout(view_layout)
 
         # Middle - Vispy Canvas
         self.canvas = scene.SceneCanvas(keys='interactive', show=True)
         self.view = self.canvas.central_widget.add_view()
         self.view.camera = 'turntable'
         self.view.camera.scale_factor = 200
-        layout.addWidget(self.canvas.native)
+        
+        # stretch=1 allows the 3D view to expand and take up all available vertical/horizontal space
+        view_layout.addWidget(self.canvas.native, stretch=1)
 
         # Right Panel - GCode
         self.gcode_list = QtWidgets.QListWidget()
         self.gcode_list.setFixedWidth(280)
         self.gcode_list.addItems(self.state.gcode_lines)
         self.gcode_list.currentRowChanged.connect(self.on_listbox_changed)
-        layout.addWidget(self.gcode_list)
+        view_layout.addWidget(self.gcode_list)
 
-        # Controls Setup
+        # ==========================================
+        # BOTTOM PANEL: Controls Box
+        # ==========================================
+        control_panel = QtWidgets.QGroupBox("Controls Setup")
+        controls_layout = QtWidgets.QHBoxLayout(control_panel)
+        main_layout.addWidget(control_panel)
+
+        # Nav Buttons
         nav_layout = QtWidgets.QHBoxLayout()
         btn_prev = QtWidgets.QPushButton("< Prev")
         btn_next = QtWidgets.QPushButton("Next >")
@@ -51,28 +62,30 @@ class VispyFrontend(QtWidgets.QMainWindow):
         btn_next.clicked.connect(self.next_step)
         nav_layout.addWidget(btn_prev)
         nav_layout.addWidget(btn_next)
-        vbox.addLayout(nav_layout)
+        controls_layout.addLayout(nav_layout)
 
-        vbox.addWidget(QtWidgets.QLabel("Line Step"))
+        # Line Step Slider
+        slider_layout = QtWidgets.QVBoxLayout()
+        slider_layout.addWidget(QtWidgets.QLabel("Line Step"))
         self.step_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self.step_slider.setMinimum(0)
         self.step_slider.setMaximum(len(self.state.gcode_lines))
         self.step_slider.setValue(self.state.current_line)
         
-        # Tracking is enabled by default, so it updates continuously while dragging
         self.step_slider.valueChanged.connect(self.slider_changed)
         self.step_slider.sliderReleased.connect(self.update_canvas)
-        vbox.addWidget(self.step_slider)
+        slider_layout.addWidget(self.step_slider)
+        controls_layout.addLayout(slider_layout)
 
-        # --- Add Debounce Timer ---
+        # Debounce Timer for Slider
         self.debounce_timer = QtCore.QTimer()
         self.debounce_timer.setSingleShot(True)
         self.debounce_timer.setInterval(150) # 150ms delay
         self.debounce_timer.timeout.connect(self.update_canvas)
 
-        vbox.addSpacing(20)
-        vbox.addWidget(QtWidgets.QLabel("Stock Dimensions"))
+        # Stock Dimensions
         stock_layout = QtWidgets.QHBoxLayout()
+        stock_layout.addWidget(QtWidgets.QLabel("Stock Dimensions:"))
         
         self.stock_x_input = QtWidgets.QDoubleSpinBox()
         self.stock_y_input = QtWidgets.QDoubleSpinBox()
@@ -83,7 +96,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
             [self.state.stock_size_x, self.state.stock_size_y, self.state.stock_size_z],
             ["X", "Y", "Z"]
         ):
-            inp_layout = QtWidgets.QVBoxLayout()
+            inp_layout = QtWidgets.QHBoxLayout()
             inp_layout.addWidget(QtWidgets.QLabel(label))
             inp.setMaximum(10000.0)
             inp.setValue(val)
@@ -91,10 +104,12 @@ class VispyFrontend(QtWidgets.QMainWindow):
             inp_layout.addWidget(inp)
             stock_layout.addLayout(inp_layout)
             
-        vbox.addLayout(stock_layout)
-        vbox.addStretch()
+        controls_layout.addLayout(stock_layout)
+        controls_layout.addStretch() # Pushes everything neatly to the left inside the box
 
-        # Visuals setup
+        # ==========================================
+        # VISUALS SETUP
+        # ==========================================
         self.stock_visual = scene.visuals.SurfacePlot(
             x=self.state.heightmap_x,
             y=self.state.heightmap_y,
@@ -103,7 +118,6 @@ class VispyFrontend(QtWidgets.QMainWindow):
             parent=self.view.scene
         )
         
-        # Skirt Visual for solid rendering
         self.skirt_visual = scene.visuals.Mesh(
             color=(0.7, 0.7, 0.15, 1.0),
             parent=self.view.scene
