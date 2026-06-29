@@ -218,7 +218,11 @@ class VispyFrontend(QtWidgets.QMainWindow):
         if self.state.heightmap_z is not None:
             if self.mode in ('LASER', 'PEN'):
                 # Surface modification bypass: keep substrate perfectly flat
-                self.state.heightmap_z[:] = self.state.base_z_map[:]
+                # Shift the visual surface plane down to Z = -1.0 so drawing lines sit on top of it
+                # TODO: If the Z of pen is changed from -1 in gcoder than this offset will be wrong
+                # Need to automatically calculate offset_z
+                offset_z = -1.1 if self.mode == 'PEN' else 0.0
+                self.state.heightmap_z[:] = self.state.base_z_map[:] + offset_z
                 self.stock_visual.set_data(z=self.state.heightmap_z)
                 self.state.last_carved_idx = max_idx
             else:
