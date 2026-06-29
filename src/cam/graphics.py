@@ -18,7 +18,7 @@ def carve_toolpaths(z_map, x_coords, y_coords, toolpaths, start_idx, end_idx, to
     tool_radius = tool_diameter / 2.0
 
     for i in range(start_idx, end_idx):
-        start, end, is_rapid, _ = toolpaths[i]
+        start, end, is_rapid, *_ = toolpaths[i]
         if is_rapid:
             continue
 

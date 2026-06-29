@@ -7,6 +7,7 @@ class AppState:
     gcode_lines: List[str] = field(default_factory=list)
     # toolpaths format: (start_pt, end_pt, is_rapid, line_idx)
     toolpaths: List[Tuple[List[float], List[float], bool, int]] = field(default_factory=list)
+    mode: str = "MILL"
     
     heightmap_x: Any = None
     heightmap_y: Any = None

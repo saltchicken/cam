@@ -1,4 +1,4 @@
-"""VisPy and PyQt5 frontend implementation."""
+"""VisPy and PyQt5 frontend implementation supporting Mill, Laser, and Pen modes."""
 import sys
 import numpy as np
 from PyQt5 import QtWidgets, QtCore
@@ -17,13 +17,16 @@ class VispyFrontend(QtWidgets.QMainWindow):
         self.config = config
         self.state = state
 
+        # Read mode from state (normalized to upper case)
+        self.mode = getattr(self.state, 'mode', 'MILL').upper()
+
         self.setWindowTitle(self.config.window_title)
         self.resize(self.config.window_width, self.config.window_height)
 
         central_widget = QtWidgets.QWidget()
         self.setCentralWidget(central_widget)
         
-        # Main Layout remains Vertical
+        # Main Layout
         main_layout = QtWidgets.QVBoxLayout(central_widget)
 
         # ==========================================
@@ -38,7 +41,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
         self.view.camera = 'turntable'
         self.view.camera.scale_factor = 200
         
-        # stretch=1 allows the 3D view to expand and take up all available vertical/horizontal space
+        # Expand 3D view space
         view_layout.addWidget(self.canvas.native, stretch=1)
 
         # Right Panel - GCode
@@ -106,26 +109,40 @@ class VispyFrontend(QtWidgets.QMainWindow):
             stock_layout.addLayout(inp_layout)
             
         controls_layout.addLayout(stock_layout)
-        controls_layout.addStretch() # Pushes everything neatly to the left inside the box
+        controls_layout.addStretch()
 
         # ==========================================
         # VISUALS SETUP
         # ==========================================
+        # Substrate definition base color based on active mode
+        if self.mode == 'LASER':
+            stock_color = (0.15, 0.15, 0.15, 1.0)  # Dark honeycomb bed / burn plate
+            skirt_color = (0.2, 0.2, 0.2, 1.0)
+            self.active_cut_color = '#ff3366'      # High visibility laser beam track
+        elif self.mode == 'PEN':
+            stock_color = (0.95, 0.95, 0.95, 1.0)  # White workspace paper
+            skirt_color = (0.85, 0.85, 0.85, 1.0)
+            self.active_cut_color = '#0066cc'      # Deep ink blue track
+        else:
+            stock_color = (0.8, 0.8, 0.2, 1.0)    # Traditional wood/polyurethane mill block
+            skirt_color = (0.7, 0.7, 0.15, 1.0)
+            self.active_cut_color = 'cyan'
+
         self.stock_visual = scene.visuals.SurfacePlot(
             x=self.state.heightmap_x,
             y=self.state.heightmap_y,
             z=self.state.heightmap_z,
-            color=(0.8, 0.8, 0.2, 1.0),
+            color=stock_color,
             parent=self.view.scene
         )
         
         self.skirt_visual = scene.visuals.Mesh(
-            color=(0.7, 0.7, 0.15, 1.0),
+            color=skirt_color,
             parent=self.view.scene
         )
 
         self.rapid_lines = scene.visuals.Line(color='orange', method='gl', parent=self.view.scene)
-        self.cut_lines = scene.visuals.Line(color='cyan', method='gl', parent=self.view.scene)
+        self.cut_lines = scene.visuals.Line(color=self.active_cut_color, method='gl', parent=self.view.scene)
         
         scene.visuals.XYZAxis(parent=self.view.scene)
 
@@ -170,7 +187,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
             self.step_slider.blockSignals(False)
             
             self.update_list_selection()
-            self.update_canvas() # Update instantly
+            self.update_canvas()
 
     def next_step(self):
         if self.state.current_line < len(self.state.gcode_lines):
@@ -180,7 +197,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
             self.step_slider.blockSignals(False)
             
             self.update_list_selection()
-            self.update_canvas() # Update instantly
+            self.update_canvas()
 
     def slider_changed(self, value):
         self.state.current_line = value
@@ -199,32 +216,37 @@ class VispyFrontend(QtWidgets.QMainWindow):
         max_idx = sum(1 for tp in self.state.toolpaths if tp[3] < self.state.current_line)
         
         if self.state.heightmap_z is not None:
-            # 1. Delta Routing Logic
-            if max_idx < self.state.last_carved_idx:
-                # Scrubbing backwards: Reset to flat stock and carve forward
+            if self.mode in ('LASER', 'PEN'):
+                # Surface modification bypass: keep substrate perfectly flat
                 self.state.heightmap_z[:] = self.state.base_z_map[:]
-                carve_toolpaths(
-                    self.state.heightmap_z, self.state.heightmap_x, self.state.heightmap_y,
-                    self.state.toolpaths, 0, max_idx, self.state.tool_diameter
-                )
+                self.stock_visual.set_data(z=self.state.heightmap_z)
+                self.state.last_carved_idx = max_idx
             else:
-                # Scrubbing forwards: Calculate delta from last known position
-                carve_toolpaths(
-                    self.state.heightmap_z, self.state.heightmap_x, self.state.heightmap_y,
-                    self.state.toolpaths, self.state.last_carved_idx, max_idx, self.state.tool_diameter
-                )
+                # Standard MILL mode: Perform structural heightmap transformations
+                if max_idx < self.state.last_carved_idx:
+                    # Scrubbing backwards: Reset to flat stock and carve forward
+                    self.state.heightmap_z[:] = self.state.base_z_map[:]
+                    carve_toolpaths(
+                        self.state.heightmap_z, self.state.heightmap_x, self.state.heightmap_y,
+                        self.state.toolpaths, 0, max_idx, self.state.tool_diameter
+                    )
+                else:
+                    # Scrubbing forwards: Calculate delta from last known position
+                    carve_toolpaths(
+                        self.state.heightmap_z, self.state.heightmap_x, self.state.heightmap_y,
+                        self.state.toolpaths, self.state.last_carved_idx, max_idx, self.state.tool_diameter
+                    )
+                
+                self.state.last_carved_idx = max_idx
+                self.stock_visual.set_data(z=self.state.heightmap_z)
+                
+                # Apply Decoupled Vertex Colors for depth analysis
+                vertices = self.stock_visual.mesh_data.get_vertices()
+                colors = generate_heightmap_colors(vertices[:, 2], self.state.stock_size_z)
+                self.stock_visual.mesh_data.set_vertex_colors(colors)
+                self.stock_visual.mesh_data_changed()
             
-            self.state.last_carved_idx = max_idx
-            self.stock_visual.set_data(z=self.state.heightmap_z)
-            
-            # 2. Apply Decoupled Vertex Colors
-            vertices = self.stock_visual.mesh_data.get_vertices()
-            colors = generate_heightmap_colors(vertices[:, 2], self.state.stock_size_z)
-            self.stock_visual.mesh_data.set_vertex_colors(colors)
-            self.stock_visual.mesh_data_changed()
-            # ----------------------------------
-            
-            # Update the solid skirt dynamically based on carved depth
+            # Update the solid base envelope model
             v, f = get_skirt_mesh(
                 self.state.heightmap_x, 
                 self.state.heightmap_y, 
@@ -237,7 +259,10 @@ class VispyFrontend(QtWidgets.QMainWindow):
         cut_pts = []
 
         for i in range(max_idx):
-            start, end, is_rapid, _ = self.state.toolpaths[i]
+            # Fallback unpacking in case toolpaths contain mode-extended fields
+            tp = self.state.toolpaths[i]
+            start, end, is_rapid, _ = tp[0], tp[1], tp[2], tp[3]
+            
             if is_rapid:
                 rapid_pts.extend([start, end])
             else:

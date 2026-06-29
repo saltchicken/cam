@@ -20,7 +20,7 @@ def main():
         sys.exit(1)
 
     # 1. Parse Data
-    gcode_lines, toolpaths, parsed_dia = parse_gcode(args.filepath)
+    gcode_lines, toolpaths, parsed_dia, parsed_mode = parse_gcode(args.filepath)
     
     # Resolve the hybrid logic: Meta tag takes priority, CLI arg is the fallback
     final_dia = parsed_dia if parsed_dia is not None else args.tool_dia
@@ -30,7 +30,8 @@ def main():
     state = AppState(
         gcode_lines=gcode_lines, 
         toolpaths=toolpaths,
-        tool_diameter=final_dia
+        tool_diameter=final_dia,
+        mode=parsed_mode
     )
 
     # 3. Generate Initial Stock Heightmap
