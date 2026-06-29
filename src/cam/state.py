@@ -1,8 +1,6 @@
 """Application state management."""
 from dataclasses import dataclass, field
 from typing import List, Tuple, Any
-import numpy as np
-
 
 @dataclass
 class AppState:
@@ -13,16 +11,14 @@ class AppState:
     heightmap_x: Any = None
     heightmap_y: Any = None
     heightmap_z: Any = None
+    base_z_map: Any = None  # Cache of the un-cut stock
 
     current_line: int = 0
+    last_carved_idx: int = 0  # Tracks how far we have already calculated
     
-    # Dynamic tool diameter retrieved from metadata or CLI fallback
     tool_diameter: float = 5.0
     
-    # Explicit stock dimensions
     stock_size_x: float = 100.0
     stock_size_y: float = 100.0
     stock_size_z: float = 20.0
-
-    # Add a resolution field (Lower = Better detail, but slower performance)
     stock_resolution: float = 0.25

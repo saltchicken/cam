@@ -26,22 +26,19 @@ def main():
     final_dia = parsed_dia if parsed_dia is not None else args.tool_dia
     
     # 2. Initialize Architecture
-    config = AppConfig()
+    config = AppConfig.load()
     state = AppState(
         gcode_lines=gcode_lines, 
         toolpaths=toolpaths,
         tool_diameter=final_dia
     )
 
-    # 3. Generate Initial Stock Heightmap from default state dimensions
-    x, y, z = create_heightmap(
-        state.stock_size_x, 
-        state.stock_size_y, 
-        resolution=state.stock_resolution
-    )
+    # 3. Generate Initial Stock Heightmap
+    x, y, z = create_heightmap(state.stock_size_x, state.stock_size_y, resolution=state.stock_resolution)
     state.heightmap_x = x
     state.heightmap_y = y
     state.heightmap_z = z
+    state.base_z_map = z.copy() # Cache the flat board
 
     # 4. Launch Frontend
     run_gui(config, state)
