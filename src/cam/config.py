@@ -2,8 +2,10 @@
 import json
 import os
 from dataclasses import dataclass, asdict
+from platformdirs import user_config_dir
 
-CONFIG_FILE = "cam_config.json"
+CONFIG_DIR = user_config_dir("cam")
+CONFIG_FILE = os.path.join(CONFIG_DIR, "cam_config.json")
 
 @dataclass
 class AppConfig:
@@ -21,12 +23,15 @@ class AppConfig:
 
     def save(self) -> None:
         """Saves current configuration to a JSON file."""
+        # Ensure the directory exists before saving
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        
         with open(CONFIG_FILE, 'w', encoding="utf-8") as f:
             json.dump(asdict(self), f, indent=4)
 
     @classmethod
     def load(cls) -> "AppConfig":
-        """Loads configuration from JSON, discarding unknown keys."""
+        """Loads configuration from JSON."""
         if os.path.exists(CONFIG_FILE):
             try:
                 with open(CONFIG_FILE, 'r', encoding="utf-8") as f:
@@ -34,6 +39,6 @@ class AppConfig:
                     valid_keys = cls.__dataclass_fields__.keys()
                     filtered_data = {k: v for k, v in data.items() if k in valid_keys}
                     return cls(**filtered_data)
-            except json.JSONDecodeError:
-                print("Warning: Corrupted config file. Loading defaults.")
+            except (json.JSONDecodeError, IOError):
+                print("Warning: Could not read config file. Loading defaults.")
         return cls()
