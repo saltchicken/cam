@@ -11,11 +11,13 @@ def create_heightmap(size_x, size_y, resolution=1.0):
     z = np.zeros((nx, ny), dtype=np.float32)
     return x, y, z
 
-def carve_toolpaths(z_map, x_coords, y_coords, toolpaths, max_idx, tool_radius=2.0):
+def carve_toolpaths(z_map, x_coords, y_coords, toolpaths, max_idx, tool_diameter=5.0):
     """Updates the Z heightmap based on the toolpaths up to max_idx."""
     z_map.fill(0.0)
     if max_idx == 0:
         return
+
+    tool_radius = tool_diameter / 2.0
 
     for i in range(max_idx):
         start, end, is_rapid, _ = toolpaths[i]
