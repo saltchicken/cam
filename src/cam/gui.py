@@ -2,6 +2,7 @@
 import sys
 import numpy as np
 from PyQt5 import QtWidgets, QtCore
+from PyQt5.QtGui import QPalette, QColor
 from vispy import scene
 
 from cam.config import AppConfig
@@ -32,7 +33,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
         main_layout.addLayout(view_layout)
 
         # Middle - Vispy Canvas
-        self.canvas = scene.SceneCanvas(keys='interactive', show=True)
+        self.canvas = scene.SceneCanvas(keys='interactive', show=True, bgcolor='#1e1e1e')
         self.view = self.canvas.central_widget.add_view()
         self.view.camera = 'turntable'
         self.view.camera.scale_factor = 200
@@ -252,6 +253,29 @@ class VispyFrontend(QtWidgets.QMainWindow):
 def run_gui(config: AppConfig, state: AppState):
     """Entry point wrapper to run the frontend."""
     app = QtWidgets.QApplication(sys.argv)
+    
+    app.setStyle("Fusion")
+    
+    dark_palette = QPalette()
+    dark_palette.setColor(QPalette.Window, QColor(43, 43, 43))
+    dark_palette.setColor(QPalette.WindowText, QtCore.Qt.white)
+    dark_palette.setColor(QPalette.Base, QColor(25, 25, 25))
+    dark_palette.setColor(QPalette.AlternateBase, QColor(43, 43, 43))
+    dark_palette.setColor(QPalette.ToolTipBase, QtCore.Qt.white)
+    dark_palette.setColor(QPalette.ToolTipText, QtCore.Qt.white)
+    dark_palette.setColor(QPalette.Text, QtCore.Qt.white)
+    dark_palette.setColor(QPalette.Button, QColor(43, 43, 43))
+    dark_palette.setColor(QPalette.ButtonText, QtCore.Qt.white)
+    dark_palette.setColor(QPalette.BrightText, QtCore.Qt.red)
+    dark_palette.setColor(QPalette.Link, QColor(42, 130, 218))
+    dark_palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+    dark_palette.setColor(QPalette.HighlightedText, QtCore.Qt.black)
+    
+    dark_palette.setColor(QPalette.Disabled, QPalette.Text, QColor(127, 127, 127))
+    dark_palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(127, 127, 127))
+    
+    app.setPalette(dark_palette)
+
     window = VispyFrontend(config, state)
     window.show()
     sys.exit(app.exec_())
