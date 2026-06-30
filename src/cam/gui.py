@@ -155,7 +155,8 @@ class VispyFrontend(QtWidgets.QMainWindow):
         """Finds the first toolpath index that corresponds to the target line."""
         target_idx = len(self.state.toolpaths)
         for i, tp in enumerate(self.state.toolpaths):
-            if tp[3] >= self.state.current_line - 1:
+            # Change >= to > to include the selected line's execution
+            if tp[3] > self.state.current_line - 1:
                 target_idx = i
                 break
         self.state.current_path_idx = target_idx
