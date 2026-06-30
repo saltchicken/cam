@@ -87,7 +87,7 @@ class LaserProfile(MachineProfile):
 
     def update_heightmap(self, state: Any, max_idx: int) -> None:
         # Laser burns lines on a flat reference grid, skipping structural deformation
-        state.heightmap_z[:] = state.base_z_map[:]
+        state.heightmap_z[:] = state.base_z_map[:] - 0.1
 
 
 class PenProfile(MachineProfile):
@@ -109,4 +109,4 @@ class PenProfile(MachineProfile):
 
     def update_heightmap(self, state: Any, max_idx: int) -> None:
         # Push paper substrate down slightly below Z=0 line trace threshold
-        state.heightmap_z[:] = state.base_z_map[:] - 1.1
+        state.heightmap_z[:] = state.base_z_map[:] - 0.1
