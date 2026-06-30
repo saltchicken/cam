@@ -50,17 +50,29 @@ class VispyFrontend(QtWidgets.QMainWindow):
         controls_layout = QtWidgets.QHBoxLayout(control_panel)
         main_layout.addWidget(control_panel)
 
+        # Navigation and Playback
         nav_layout = QtWidgets.QHBoxLayout()
-        btn_prev = QtWidgets.QPushButton("< Prev")
-        btn_next = QtWidgets.QPushButton("Next >")
+        btn_prev = QtWidgets.QPushButton("< Step")
+        self.btn_play = QtWidgets.QPushButton("Play")
+        btn_next = QtWidgets.QPushButton("Step >")
+        
         btn_prev.clicked.connect(self.prev_step)
+        self.btn_play.clicked.connect(self.toggle_play)
         btn_next.clicked.connect(self.next_step)
+        
         nav_layout.addWidget(btn_prev)
+        nav_layout.addWidget(self.btn_play)
         nav_layout.addWidget(btn_next)
         controls_layout.addLayout(nav_layout)
 
+        # Playback Timer setup
+        self.play_timer = QtCore.QTimer()
+        self.play_timer.setInterval(20)  # 20ms between steps for smooth animation
+        self.play_timer.timeout.connect(self.animate_step)
+
+        # Line Slider
         slider_layout = QtWidgets.QVBoxLayout()
-        slider_layout.addWidget(QtWidgets.QLabel("Line Step"))
+        slider_layout.addWidget(QtWidgets.QLabel("Line Target"))
         self.step_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
         self.step_slider.setMinimum(0)
         self.step_slider.setMaximum(len(self.state.gcode_lines))
@@ -76,6 +88,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
         self.debounce_timer.setInterval(150)
         self.debounce_timer.timeout.connect(self.update_canvas)
 
+        # Stock Dimensions
         stock_layout = QtWidgets.QHBoxLayout()
         stock_layout.addWidget(QtWidgets.QLabel("Stock Dimensions:"))
         
@@ -100,7 +113,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
         controls_layout.addStretch()
 
         # ==========================================
-        # VISUALS SETUP (Driven via injected Profile Strategy)
+        # VISUALS SETUP 
         # ==========================================
         profile = self.state.profile
 
@@ -122,6 +135,30 @@ class VispyFrontend(QtWidgets.QMainWindow):
         
         scene.visuals.XYZAxis(parent=self.view.scene)
         self.update_canvas()
+
+    # --- Sync Logic ---
+    def sync_line_from_path(self):
+        """Updates the slider and list UI to match the current toolpath index."""
+        if self.state.current_path_idx == 0:
+            self.state.current_line = 0
+        else:
+            # tp[3] is the original line index of this path
+            tp = self.state.toolpaths[self.state.current_path_idx - 1]
+            self.state.current_line = tp[3] + 1 
+
+        self.step_slider.blockSignals(True)
+        self.step_slider.setValue(self.state.current_line)
+        self.step_slider.blockSignals(False)
+        self.update_list_selection()
+
+    def set_path_from_line(self):
+        """Finds the first toolpath index that corresponds to the target line."""
+        target_idx = len(self.state.toolpaths)
+        for i, tp in enumerate(self.state.toolpaths):
+            if tp[3] >= self.state.current_line - 1:
+                target_idx = i
+                break
+        self.state.current_path_idx = target_idx
 
     def update_list_selection(self):
         if 0 < self.state.current_line <= len(self.state.gcode_lines):
@@ -150,47 +187,61 @@ class VispyFrontend(QtWidgets.QMainWindow):
         self.stock_visual.set_data(x=x, y=y, z=z)
         self.update_canvas()
 
+    # --- Playback and Navigation ---
+    def toggle_play(self):
+        if self.play_timer.isActive():
+            self.play_timer.stop()
+            self.btn_play.setText("Play")
+        else:
+            self.play_timer.start()
+            self.btn_play.setText("Pause")
+
+    def animate_step(self):
+        if self.state.current_path_idx < len(self.state.toolpaths):
+            self.state.current_path_idx += 1
+            self.sync_line_from_path()
+            self.update_canvas()
+        else:
+            self.play_timer.stop()
+            self.btn_play.setText("Play")
+
     def prev_step(self):
-        if self.state.current_line > 0:
-            self.state.current_line -= 1
-            self.step_slider.blockSignals(True)
-            self.step_slider.setValue(self.state.current_line)
-            self.step_slider.blockSignals(False)
-            self.update_list_selection()
+        if self.state.current_path_idx > 0:
+            self.state.current_path_idx -= 1
+            self.sync_line_from_path()
             self.update_canvas()
 
     def next_step(self):
-        if self.state.current_line < len(self.state.gcode_lines):
-            self.state.current_line += 1
-            self.step_slider.blockSignals(True)
-            self.step_slider.setValue(self.state.current_line)
-            self.step_slider.blockSignals(False)
-            self.update_list_selection()
+        if self.state.current_path_idx < len(self.state.toolpaths):
+            self.state.current_path_idx += 1
+            self.sync_line_from_path()
             self.update_canvas()
 
     def slider_changed(self, value):
         self.state.current_line = value
+        self.set_path_from_line()
         self.update_list_selection()
         if not self.step_slider.isSliderDown():
             self.debounce_timer.start()
 
     def on_listbox_changed(self, row):
         self.state.current_line = row + 1
+        self.set_path_from_line()
         self.step_slider.blockSignals(True)
         self.step_slider.setValue(self.state.current_line)
         self.step_slider.blockSignals(False)
         self.update_canvas()
 
+    # --- Core Renderer ---
     def update_canvas(self):
-        max_idx = sum(1 for tp in self.state.toolpaths if tp[3] < self.state.current_line)
+        # We now render directly based on the exact path step, instead of line chunks
+        max_idx = self.state.current_path_idx
         
         if self.state.heightmap_z is not None:
-            # Execute decoupled target profile rules 
             self.state.profile.update_heightmap(self.state, max_idx)
             self.state.last_carved_idx = max_idx
             self.stock_visual.set_data(z=self.state.heightmap_z)
             
-            # Post-processing vertex shifts for depth maps (Only required on Mill Profile meshes)
             if self.state.profile.name == "MILL":
                 vertices = self.stock_visual.mesh_data.get_vertices()
                 colors = generate_heightmap_colors(vertices[:, 2], self.state.stock_size_z)
@@ -210,7 +261,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
 
         for i in range(max_idx):
             tp = self.state.toolpaths[i]
-            start, end, is_rapid, _ = tp[0], tp[1], tp[2], tp[3]
+            start, end, is_rapid = tp[0], tp[1], tp[2]
             
             if is_rapid:
                 rapid_pts.extend([start, end])

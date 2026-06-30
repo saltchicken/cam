@@ -6,7 +6,7 @@ from cam.profiles import MachineProfile, MillProfile
 class AppState:
     gcode_lines: List[str] = field(default_factory=list)
     toolpaths: List[Tuple[List[float], List[float], bool, int]] = field(default_factory=list)
-    profile: MachineProfile = field(default_factory=MillProfile) # Replaced mode string with instance
+    profile: MachineProfile = field(default_factory=MillProfile) 
     
     heightmap_x: Any = None
     heightmap_y: Any = None
@@ -14,7 +14,8 @@ class AppState:
     base_z_map: Any = None 
 
     current_line: int = 0
-    last_carved_idx: int = 0 
+    current_path_idx: int = 0
+    last_carved_idx: int = 0
     
     tool_diameter: float = 5.0
     
