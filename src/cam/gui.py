@@ -1,4 +1,3 @@
-"""VisPy and PyQt5 frontend implementation supporting Mill, Laser, and Pen modes."""
 import sys
 import numpy as np
 from PyQt5 import QtWidgets, QtCore
@@ -6,7 +5,7 @@ from PyQt5.QtGui import QPalette, QColor
 from vispy import scene
 
 from cam.config import AppConfig
-from cam.graphics import create_heightmap, carve_toolpaths, get_skirt_mesh, generate_heightmap_colors
+from cam.graphics import create_heightmap, get_skirt_mesh, generate_heightmap_colors
 from cam.state import AppState
 
 
@@ -17,16 +16,12 @@ class VispyFrontend(QtWidgets.QMainWindow):
         self.config = config
         self.state = state
 
-        # Read mode from state (normalized to upper case)
-        self.mode = getattr(self.state, 'mode', 'MILL').upper()
-
         self.setWindowTitle(self.config.window_title)
         self.resize(self.config.window_width, self.config.window_height)
 
         central_widget = QtWidgets.QWidget()
         self.setCentralWidget(central_widget)
         
-        # Main Layout
         main_layout = QtWidgets.QVBoxLayout(central_widget)
 
         # ==========================================
@@ -35,16 +30,13 @@ class VispyFrontend(QtWidgets.QMainWindow):
         view_layout = QtWidgets.QHBoxLayout()
         main_layout.addLayout(view_layout)
 
-        # Middle - Vispy Canvas
         self.canvas = scene.SceneCanvas(keys='interactive', show=True, bgcolor='#1e1e1e')
         self.view = self.canvas.central_widget.add_view()
         self.view.camera = 'turntable'
         self.view.camera.scale_factor = 200
         
-        # Expand 3D view space
         view_layout.addWidget(self.canvas.native, stretch=1)
 
-        # Right Panel - GCode
         self.gcode_list = QtWidgets.QListWidget()
         self.gcode_list.setFixedWidth(280)
         self.gcode_list.addItems(self.state.gcode_lines)
@@ -58,7 +50,6 @@ class VispyFrontend(QtWidgets.QMainWindow):
         controls_layout = QtWidgets.QHBoxLayout(control_panel)
         main_layout.addWidget(control_panel)
 
-        # Nav Buttons
         nav_layout = QtWidgets.QHBoxLayout()
         btn_prev = QtWidgets.QPushButton("< Prev")
         btn_next = QtWidgets.QPushButton("Next >")
@@ -68,7 +59,6 @@ class VispyFrontend(QtWidgets.QMainWindow):
         nav_layout.addWidget(btn_next)
         controls_layout.addLayout(nav_layout)
 
-        # Line Step Slider
         slider_layout = QtWidgets.QVBoxLayout()
         slider_layout.addWidget(QtWidgets.QLabel("Line Step"))
         self.step_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
@@ -81,13 +71,11 @@ class VispyFrontend(QtWidgets.QMainWindow):
         slider_layout.addWidget(self.step_slider)
         controls_layout.addLayout(slider_layout)
 
-        # Debounce Timer for Slider
         self.debounce_timer = QtCore.QTimer()
         self.debounce_timer.setSingleShot(True)
-        self.debounce_timer.setInterval(150) # 150ms delay
+        self.debounce_timer.setInterval(150)
         self.debounce_timer.timeout.connect(self.update_canvas)
 
-        # Stock Dimensions
         stock_layout = QtWidgets.QHBoxLayout()
         stock_layout.addWidget(QtWidgets.QLabel("Stock Dimensions:"))
         
@@ -112,51 +100,36 @@ class VispyFrontend(QtWidgets.QMainWindow):
         controls_layout.addStretch()
 
         # ==========================================
-        # VISUALS SETUP
+        # VISUALS SETUP (Driven via injected Profile Strategy)
         # ==========================================
-        # Substrate definition base color based on active mode
-        if self.mode == 'LASER':
-            stock_color = (0.15, 0.15, 0.15, 1.0)  # Dark honeycomb bed / burn plate
-            skirt_color = (0.2, 0.2, 0.2, 1.0)
-            self.active_cut_color = '#ff3366'      # High visibility laser beam track
-        elif self.mode == 'PEN':
-            stock_color = (0.95, 0.95, 0.95, 1.0)  # White workspace paper
-            skirt_color = (0.85, 0.85, 0.85, 1.0)
-            self.active_cut_color = '#0066cc'      # Deep ink blue track
-        else:
-            stock_color = (0.8, 0.8, 0.2, 1.0)    # Traditional wood/polyurethane mill block
-            skirt_color = (0.7, 0.7, 0.15, 1.0)
-            self.active_cut_color = 'cyan'
+        profile = self.state.profile
 
         self.stock_visual = scene.visuals.SurfacePlot(
             x=self.state.heightmap_x,
             y=self.state.heightmap_y,
             z=self.state.heightmap_z,
-            color=stock_color,
+            color=profile.stock_color,
             parent=self.view.scene
         )
         
         self.skirt_visual = scene.visuals.Mesh(
-            color=skirt_color,
+            color=profile.skirt_color,
             parent=self.view.scene
         )
 
         self.rapid_lines = scene.visuals.Line(color='orange', method='gl', parent=self.view.scene)
-        self.cut_lines = scene.visuals.Line(color=self.active_cut_color, method='gl', parent=self.view.scene)
+        self.cut_lines = scene.visuals.Line(color=profile.cut_line_color, method='gl', parent=self.view.scene)
         
         scene.visuals.XYZAxis(parent=self.view.scene)
-
         self.update_canvas()
 
     def update_list_selection(self):
-        """Immediately updates the highlighted row in the G-code listbox."""
         if 0 < self.state.current_line <= len(self.state.gcode_lines):
             self.gcode_list.blockSignals(True)
             self.gcode_list.setCurrentRow(self.state.current_line - 1)
             self.gcode_list.blockSignals(False)
 
     def closeEvent(self, event):
-        """Save window state on close."""
         self.config.window_width = self.width()
         self.config.window_height = self.height()
         self.config.save()
@@ -173,9 +146,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
         self.state.heightmap_z = z
         self.state.base_z_map = z.copy()
         
-        # Reset caching on size change
         self.state.last_carved_idx = 0
-        
         self.stock_visual.set_data(x=x, y=y, z=z)
         self.update_canvas()
 
@@ -185,7 +156,6 @@ class VispyFrontend(QtWidgets.QMainWindow):
             self.step_slider.blockSignals(True)
             self.step_slider.setValue(self.state.current_line)
             self.step_slider.blockSignals(False)
-            
             self.update_list_selection()
             self.update_canvas()
 
@@ -195,7 +165,6 @@ class VispyFrontend(QtWidgets.QMainWindow):
             self.step_slider.blockSignals(True)
             self.step_slider.setValue(self.state.current_line)
             self.step_slider.blockSignals(False)
-            
             self.update_list_selection()
             self.update_canvas()
 
@@ -216,41 +185,18 @@ class VispyFrontend(QtWidgets.QMainWindow):
         max_idx = sum(1 for tp in self.state.toolpaths if tp[3] < self.state.current_line)
         
         if self.state.heightmap_z is not None:
-            if self.mode in ('LASER', 'PEN'):
-                # Surface modification bypass: keep substrate perfectly flat
-                # Shift the visual surface plane down to Z = -1.0 so drawing lines sit on top of it
-                # TODO: If the Z of pen is changed from -1 in gcoder than this offset will be wrong
-                # Need to automatically calculate offset_z
-                offset_z = -1.1 if self.mode == 'PEN' else 0.0
-                self.state.heightmap_z[:] = self.state.base_z_map[:] + offset_z
-                self.stock_visual.set_data(z=self.state.heightmap_z)
-                self.state.last_carved_idx = max_idx
-            else:
-                # Standard MILL mode: Perform structural heightmap transformations
-                if max_idx < self.state.last_carved_idx:
-                    # Scrubbing backwards: Reset to flat stock and carve forward
-                    self.state.heightmap_z[:] = self.state.base_z_map[:]
-                    carve_toolpaths(
-                        self.state.heightmap_z, self.state.heightmap_x, self.state.heightmap_y,
-                        self.state.toolpaths, 0, max_idx, self.state.tool_diameter
-                    )
-                else:
-                    # Scrubbing forwards: Calculate delta from last known position
-                    carve_toolpaths(
-                        self.state.heightmap_z, self.state.heightmap_x, self.state.heightmap_y,
-                        self.state.toolpaths, self.state.last_carved_idx, max_idx, self.state.tool_diameter
-                    )
-                
-                self.state.last_carved_idx = max_idx
-                self.stock_visual.set_data(z=self.state.heightmap_z)
-                
-                # Apply Decoupled Vertex Colors for depth analysis
+            # Execute decoupled target profile rules 
+            self.state.profile.update_heightmap(self.state, max_idx)
+            self.state.last_carved_idx = max_idx
+            self.stock_visual.set_data(z=self.state.heightmap_z)
+            
+            # Post-processing vertex shifts for depth maps (Only required on Mill Profile meshes)
+            if self.state.profile.name == "MILL":
                 vertices = self.stock_visual.mesh_data.get_vertices()
                 colors = generate_heightmap_colors(vertices[:, 2], self.state.stock_size_z)
                 self.stock_visual.mesh_data.set_vertex_colors(colors)
                 self.stock_visual.mesh_data_changed()
             
-            # Update the solid base envelope model
             v, f = get_skirt_mesh(
                 self.state.heightmap_x, 
                 self.state.heightmap_y, 
@@ -263,7 +209,6 @@ class VispyFrontend(QtWidgets.QMainWindow):
         cut_pts = []
 
         for i in range(max_idx):
-            # Fallback unpacking in case toolpaths contain mode-extended fields
             tp = self.state.toolpaths[i]
             start, end, is_rapid, _ = tp[0], tp[1], tp[2], tp[3]
             
@@ -284,9 +229,7 @@ class VispyFrontend(QtWidgets.QMainWindow):
 
 
 def run_gui(config: AppConfig, state: AppState):
-    """Entry point wrapper to run the frontend."""
     app = QtWidgets.QApplication(sys.argv)
-    
     app.setStyle("Fusion")
     
     dark_palette = QPalette()
@@ -303,7 +246,6 @@ def run_gui(config: AppConfig, state: AppState):
     dark_palette.setColor(QPalette.Link, QColor(42, 130, 218))
     dark_palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
     dark_palette.setColor(QPalette.HighlightedText, QtCore.Qt.black)
-    
     dark_palette.setColor(QPalette.Disabled, QPalette.Text, QColor(127, 127, 127))
     dark_palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(127, 127, 127))
     

@@ -1,21 +1,20 @@
-"""Application state management."""
 from dataclasses import dataclass, field
 from typing import List, Tuple, Any
+from cam.profiles import MachineProfile, MillProfile
 
 @dataclass
 class AppState:
     gcode_lines: List[str] = field(default_factory=list)
-    # toolpaths format: (start_pt, end_pt, is_rapid, line_idx)
     toolpaths: List[Tuple[List[float], List[float], bool, int]] = field(default_factory=list)
-    mode: str = "MILL"
+    profile: MachineProfile = field(default_factory=MillProfile) # Replaced mode string with instance
     
     heightmap_x: Any = None
     heightmap_y: Any = None
     heightmap_z: Any = None
-    base_z_map: Any = None  # Cache of the un-cut stock
+    base_z_map: Any = None 
 
     current_line: int = 0
-    last_carved_idx: int = 0  # Tracks how far we have already calculated
+    last_carved_idx: int = 0 
     
     tool_diameter: float = 5.0
     
