@@ -86,7 +86,7 @@ class LaserProfile(MachineProfile):
         return '#ff3366'  # High-visibility burn track
 
     def update_heightmap(self, state: Any, max_idx: int) -> None:
-        # Laser burns lines on a flat reference grid, skipping structural deformation
+        # Push laser substrate down slightly below Z=0.0 line trace threshold
         state.heightmap_z[:] = state.base_z_map[:] - 0.1
 
 
@@ -108,5 +108,5 @@ class PenProfile(MachineProfile):
         return '#0066cc'  # Deep ink blue track
 
     def update_heightmap(self, state: Any, max_idx: int) -> None:
-        # Push paper substrate down slightly below Z=0 line trace threshold
-        state.heightmap_z[:] = state.base_z_map[:] - 0.1
+        # Push paper substrate down slightly below Z=-1.0 line trace threshold
+        state.heightmap_z[:] = state.base_z_map[:] - 1.1
