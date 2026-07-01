@@ -14,18 +14,20 @@ def main():
     parser = argparse.ArgumentParser(description="Visualize CNC G-Code in 3D.")
     parser.add_argument("filepath", help="Path to the .nc G-Code file to visualize")
     parser.add_argument("--tool-dia", type=float, default=5.0, help="Fallback tool diameter (mm) if missing from file metadata")
+    # Add the new mode argument with choices
+    parser.add_argument("--mode", type=str, choices=['mill', 'laser', 'pen'], default='mill', help="Machine visualization mode")
     args = parser.parse_args()
 
     if not os.path.exists(args.filepath):
         print(f"Error: The file '{args.filepath}' could not be found.")
         sys.exit(1)
 
-    # 1. Parse Data
-    gcode_lines, toolpaths, parsed_dia, parsed_mode = parse_gcode(args.filepath)
+    # 1. Parse Data (removed parsed_mode from the return signature)
+    gcode_lines, toolpaths, parsed_dia = parse_gcode(args.filepath)
     final_dia = parsed_dia if parsed_dia is not None else args.tool_dia
     
-    # 2. Select Machine Profile Strategy
-    normalized_mode = str(parsed_mode).upper()
+    # 2. Select Machine Profile Strategy using the CLI argument
+    normalized_mode = args.mode.upper()
     if normalized_mode == 'LASER':
         profile = LaserProfile()
     elif normalized_mode == 'PEN':
