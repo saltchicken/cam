@@ -62,11 +62,11 @@ def parse_gcode(file_path):
                 elif w in ("G2", "G02"): current_g = "G2"
                 elif w in ("G3", "G03"): current_g = "G3"
 
-            x_match = re.search(r'X\s*([-+]?\d*\.\d+|\d+)', line_clean)
-            y_match = re.search(r'Y\s*([-+]?\d*\.\d+|\d+)', line_clean)
-            z_match = re.search(r'Z\s*([-+]?\d*\.\d+|\d+)', line_clean)
-            i_match = re.search(r'I\s*([-+]?\d*\.\d+|\d+)', line_clean)
-            j_match = re.search(r'J\s*([-+]?\d*\.\d+|\d+)', line_clean)
+            x_match = re.search(r'X\s*([-+]?(?:\d*\.\d+|\d+\.?\d*))', line_clean)
+            y_match = re.search(r'Y\s*([-+]?(?:\d*\.\d+|\d+\.?\d*))', line_clean)
+            z_match = re.search(r'Z\s*([-+]?(?:\d*\.\d+|\d+\.?\d*))', line_clean)
+            i_match = re.search(r'I\s*([-+]?(?:\d*\.\d+|\d+\.?\d*))', line_clean)
+            j_match = re.search(r'J\s*([-+]?(?:\d*\.\d+|\d+\.?\d*))', line_clean)
 
             if not (x_match or y_match or z_match):
                 continue
