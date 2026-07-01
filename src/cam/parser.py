@@ -1,135 +1,215 @@
-"""G-Code parsing and toolpath generation."""
+"""
+Robust state-machine-based G-Code parser and interpreter.
+Handles tokenization, modal state tracking, and geometry linearization.
+"""
 import math
 import re
+from dataclasses import dataclass, field
+from typing import List, Tuple, Dict, Optional, Iterator
 
-def parse_gcode(file_path):
-    """Parse a G-Code file and extract toolpaths, tracking tool states."""
-    toolpaths = []
-    gcode_lines = []
-    current_pos = [0.0, 0.0, 0.0]
+
+@dataclass
+class MachineState:
+    """Tracks the modal state and position of the CNC machine."""
+    x: float = 0.0
+    y: float = 0.0
+    z: float = 0.0
+    i: float = 0.0
+    j: float = 0.0
     
-    current_g = "G0"
-    is_absolute = True
-    unit_multiplier = 1.0  # Default to mm
+    feed_rate: float = 0.0
+    spindle_speed: int = 0
     
-    parsed_dia = None
-    parsed_mode = "MILL"   # Default fallback
+    is_absolute: bool = True
+    unit_multiplier: float = 1.0  # 1.0 for mm, 25.4 for inches
+    motion_mode: str = "G0"
+    tool_is_on: bool = False
+
+
+@dataclass
+class TokenizedLine:
+    """Represents a single parsed line of G-Code."""
+    line_number: int
+    raw_text: str
+    words: Dict[str, float]
+    metadata: Dict[str, str] = field(default_factory=dict)
+
+
+class GCodeTokenizer:
+    """Strips comments and tokenizes raw strings into G-Code words."""
     
-    # New state trackers for Laser/Pen
-    tool_is_on = False
-    current_intensity = 0
+    # Matches letter followed by optional spaces and a number (e.g., 'X -10.5', 'G01')
+    WORD_PATTERN = re.compile(r'([A-Z])\s*([-+]?\d*\.?\d+)')
+    META_PATTERN = re.compile(r'\(META:\s*([A-Z_]+)=([^\)]+)\)', re.IGNORECASE)
 
-    with open(file_path, 'r', encoding="utf-8") as f:
-        for line in f:
-            raw_line = line.strip()
-            
-            # 1. Extract Metadata
-            if parsed_dia is None:
-                meta_match = re.search(r'\(META:\s*TOOL_DIA=([\d.]+)\)', raw_line, re.IGNORECASE)
-                if meta_match:
-                    parsed_dia = float(meta_match.group(1))
-                    
-            if "(META: MODE=" in raw_line.upper():
-                mode_match = re.search(r'\(META:\s*MODE=([A-Z]+)\)', raw_line, re.IGNORECASE)
-                if mode_match:
-                    parsed_mode = mode_match.group(1).upper()
+    @classmethod
+    def parse_line(cls, raw_line: str, line_idx: int) -> Optional[TokenizedLine]:
+        """Parses a single line into a dictionary of command words."""
+        text = raw_line.strip()
+        if not text:
+            return None
 
-            line_clean = raw_line.upper().split(';')[0].split('(')[0].strip()
+        # 1. Extract Metadata (specific to your gcoder output)
+        metadata = {}
+        for match in cls.META_PATTERN.finditer(text):
+            metadata[match.group(1).upper()] = match.group(2).strip()
 
-            if not line_clean:
-                continue
+        # 2. Strip comments
+        # Remove inline parenthesis comments and everything after semicolons
+        text_no_comments = re.sub(r'\(.*?\)', '', text)
+        text_no_comments = text_no_comments.split(';')[0].strip().upper()
 
-            line_idx = len(gcode_lines)
-            gcode_lines.append(f"{line_idx + 1}: {raw_line}")
+        if not text_no_comments and not metadata:
+            return None
 
-            words = line_clean.split()
-            
-            # 2. Update Machine States
-            if "G20" in words: unit_multiplier = 25.4
-            elif "G21" in words: unit_multiplier = 1.0
-            
-            if "G90" in words: is_absolute = True
-            elif "G91" in words: is_absolute = False
-            
-            # Spindle / Laser Power State
-            if "M3" in words or "M4" in words:
-                tool_is_on = True
-            if "M5" in words:
-                tool_is_on = False
-                
-            s_match = re.search(r'S\s*(\d+)', line_clean)
-            if s_match:
-                current_intensity = int(s_match.group(1))
+        # 3. Tokenize words
+        words = {}
+        for match in cls.WORD_PATTERN.finditer(text_no_comments):
+            letter = match.group(1)
+            value = float(match.group(2))
+            words[letter] = value
 
-            # Modal Movement State
-            for w in words:
-                if w in ("G0", "G00"): current_g = "G0"
-                elif w in ("G1", "G01"): current_g = "G1"
-                elif w in ("G2", "G02"): current_g = "G2"
-                elif w in ("G3", "G03"): current_g = "G3"
+        return TokenizedLine(
+            line_number=line_idx,
+            raw_text=raw_line,
+            words=words,
+            metadata=metadata
+        )
 
-            x_match = re.search(r'X\s*([-+]?\d*\.\d+|\d+)', line_clean)
-            y_match = re.search(r'Y\s*([-+]?\d*\.\d+|\d+)', line_clean)
-            z_match = re.search(r'Z\s*([-+]?\d*\.\d+|\d+)', line_clean)
-            i_match = re.search(r'I\s*([-+]?\d*\.\d+|\d+)', line_clean)
-            j_match = re.search(r'J\s*([-+]?\d*\.\d+|\d+)', line_clean)
 
-            if not (x_match or y_match or z_match):
-                continue
+class GCodeInterpreter:
+    """Interprets tokenized G-Code, updates machine state, and emits toolpaths."""
+    
+    def __init__(self, fallback_dia: float = 5.0):
+        self.state = MachineState()
+        self.toolpaths = []
+        self.gcode_lines = []
+        
+        self.parsed_dia: Optional[float] = None
+        self.parsed_mode: str = "MILL"
+        self.fallback_dia = fallback_dia
 
-            start_pt = list(current_pos)
-            
-            # 3. Apply Coordinates
-            if x_match:
-                val = float(x_match.group(1)) * unit_multiplier
-                current_pos[0] = val if is_absolute else current_pos[0] + val
-            if y_match:
-                val = float(y_match.group(1)) * unit_multiplier
-                current_pos[1] = val if is_absolute else current_pos[1] + val
-            if z_match:
-                val = float(z_match.group(1)) * unit_multiplier
-                current_pos[2] = val if is_absolute else current_pos[2] + val
-                
-            end_pt = list(current_pos)
-            is_rapid = current_g == "G0"
+    def process_file(self, filepath: str) -> Tuple[List[str], List, float, str]:
+        """Main entry point to process an entire file."""
+        with open(filepath, 'r', encoding="utf-8") as f:
+            for idx, raw_line in enumerate(f):
+                token = GCodeTokenizer.parse_line(raw_line, idx)
+                if token:
+                    self.gcode_lines.append(f"{idx + 1}: {raw_line.strip()}")
+                    self._update_state_and_emit(token)
 
-            # 4. Generate Toolpaths with Extended State Signatures
-            if current_g in ("G2", "G3"):
-                i_val = (float(i_match.group(1)) * unit_multiplier) if i_match else 0.0
-                j_val = (float(j_match.group(1)) * unit_multiplier) if j_match else 0.0
+        final_dia = self.parsed_dia if self.parsed_dia is not None else self.fallback_dia
+        return self.gcode_lines, self.toolpaths, final_dia, self.parsed_mode
 
-                cx, cy = start_pt[0] + i_val, start_pt[1] + j_val
-                r = math.sqrt(i_val**2 + j_val**2)
+    def _update_state_and_emit(self, token: TokenizedLine) -> None:
+        """Applies a tokenized line to the machine state and generates movements."""
+        
+        # Parse Metadata
+        if 'TOOL_DIA' in token.metadata:
+            self.parsed_dia = float(token.metadata['TOOL_DIA'])
+        if 'MODE' in token.metadata:
+            self.parsed_mode = token.metadata['MODE']
 
-                if r > 0.0001:
-                    angle_start = math.atan2(start_pt[1] - cy, start_pt[0] - cx)
-                    angle_end = math.atan2(end_pt[1] - cy, end_pt[0] - cx)
+        words = token.words
+        if not words:
+            return
 
-                    if current_g == "G3":  # Counter-clockwise
-                        if angle_end <= angle_start:
-                            angle_end += 2 * math.pi
-                    else:  # Clockwise
-                        if angle_end >= angle_start:
-                            angle_end -= 2 * math.pi
+        # 1. Update Unit & Positioning Modes (G20/G21, G90/G91)
+        if words.get('G') == 20: self.state.unit_multiplier = 25.4
+        elif words.get('G') == 21: self.state.unit_multiplier = 1.0
+        
+        if words.get('G') == 90: self.state.is_absolute = True
+        elif words.get('G') == 91: self.state.is_absolute = False
 
-                    arc_angle = abs(angle_end - angle_start)
-                    segments = max(1, int(math.degrees(arc_angle) / 5.0))
+        # 2. Update Tool/Spindle State (M3/M4/M5, S)
+        m_code = words.get('M')
+        if m_code in (3, 4): self.state.tool_is_on = True
+        elif m_code == 5: self.state.tool_is_on = False
+        
+        if 'S' in words:
+            self.state.spindle_speed = int(words['S'])
 
-                    prev_pt = list(start_pt)
-                    for step in range(1, segments + 1):
-                        t = step / segments
-                        cur_angle = angle_start + (angle_end - angle_start) * t
+        # 3. Determine Motion Mode
+        g_code = words.get('G')
+        if g_code in (0, 1, 2, 3):
+            self.state.motion_mode = f"G{int(g_code)}"
 
-                        next_pt = [
-                            cx + r * math.cos(cur_angle),
-                            cy + r * math.sin(cur_angle),
-                            start_pt[2] + (end_pt[2] - start_pt[2]) * t
-                        ]
-                        toolpaths.append((prev_pt, next_pt, False, line_idx, tool_is_on, current_intensity))
-                        prev_pt = next_pt
+        # 4. Calculate Target Coordinates
+        has_motion = any(axis in words for axis in ('X', 'Y', 'Z'))
+        if not has_motion:
+            return
+
+        start_pt = [self.state.x, self.state.y, self.state.z]
+        
+        for axis, index in (('X', 0), ('Y', 1), ('Z', 2)):
+            if axis in words:
+                val = words[axis] * self.state.unit_multiplier
+                if self.state.is_absolute:
+                    setattr(self.state, axis.lower(), val)
                 else:
-                    toolpaths.append((start_pt, end_pt, False, line_idx, tool_is_on, current_intensity))
-            else:
-                toolpaths.append((start_pt, end_pt, is_rapid, line_idx, tool_is_on, current_intensity))
+                    setattr(self.state, axis.lower(), start_pt[index] + val)
 
-    return gcode_lines, toolpaths, parsed_dia, parsed_mode
+        end_pt = [self.state.x, self.state.y, self.state.z]
+        is_rapid = self.state.motion_mode == "G0"
+
+        # 5. Emit Toolpath Segments
+        if self.state.motion_mode in ("G2", "G3"):
+            self._emit_arc(start_pt, end_pt, words, token.line_number)
+        else:
+            self.toolpaths.append((
+                start_pt, 
+                end_pt, 
+                is_rapid, 
+                token.line_number, 
+                self.state.tool_is_on, 
+                self.state.spindle_speed
+            ))
+
+    def _emit_arc(self, start_pt: List[float], end_pt: List[float], 
+                  words: Dict[str, float], line_num: int) -> None:
+        """Linearizes an arc into small line segments for the 3D viewer."""
+        i_val = words.get('I', 0.0) * self.state.unit_multiplier
+        j_val = words.get('J', 0.0) * self.state.unit_multiplier
+
+        cx = start_pt[0] + i_val
+        cy = start_pt[1] + j_val
+        r = math.hypot(i_val, j_val)
+
+        if r < 0.0001:
+            self.toolpaths.append((start_pt, end_pt, False, line_num, self.state.tool_is_on, self.state.spindle_speed))
+            return
+
+        angle_start = math.atan2(start_pt[1] - cy, start_pt[0] - cx)
+        angle_end = math.atan2(end_pt[1] - cy, end_pt[0] - cx)
+
+        if self.state.motion_mode == "G3":  # CCW
+            if angle_end <= angle_start:
+                angle_end += 2 * math.pi
+        else:  # CW (G2)
+            if angle_end >= angle_start:
+                angle_end -= 2 * math.pi
+
+        arc_angle = abs(angle_end - angle_start)
+        # 5 degrees per segment provides smooth enough curves for UI
+        segments = max(1, int(math.degrees(arc_angle) / 5.0))
+
+        prev_pt = list(start_pt)
+        for step in range(1, segments + 1):
+            t = step / segments
+            cur_angle = angle_start + (angle_end - angle_start) * t
+
+            next_pt = [
+                cx + r * math.cos(cur_angle),
+                cy + r * math.sin(cur_angle),
+                start_pt[2] + (end_pt[2] - start_pt[2]) * t
+            ]
+            self.toolpaths.append((prev_pt, next_pt, False, line_num, self.state.tool_is_on, self.state.spindle_speed))
+            prev_pt = next_pt
+
+
+def parse_gcode(file_path: str, fallback_dia: float = 5.0):
+    """
+    Convenience function matching the original API signature of cam/parser.py
+    """
+    interpreter = GCodeInterpreter(fallback_dia=fallback_dia)
+    return interpreter.process_file(file_path)
